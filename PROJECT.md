@@ -89,7 +89,8 @@ Local-only tool, outbound-only network calls (YouTube autocomplete + yt-dlp + lo
 ## Known problems / gotchas
 
 - yt-dlp needs to stay current — YouTube's extraction changes break older versions (hit this immediately: stock Debian trixie yt-dlp 2025.04.30 failed with a SABR-streaming error; fixed by installing 2026.03.17 from `trixie-backports`). If searches start failing with extractor errors again, check for a newer yt-dlp first.
-- `--flat-playlist` in Stage 2 is fast but may return `None`/`0` for `view_count`/`channel_follower_count` on some results — noted in the build plan as a thing to watch when verifying Stage 2 output.
+- Stage 2 does **not** use `--flat-playlist`, unlike the build plan's initial draft. Smoke-tested it first: `upload_date` and `channel_follower_count` came back empty on 60/60 videos, which would have silently zeroed Stage 3's demand/freshness/breakout scoring for every idea. Switched to full-resolution yt-dlp calls per the plan's own documented fallback. Cost: ~7s/query instead of near-instant, so Stage 2 on the real ~4,500-query autocomplete set takes ~2-2.5 hours instead of the plan's 15-30 min estimate (still fine for an overnight run; MAX_CONCURRENT_SEARCHES=4 kept conservative to avoid YouTube rate-limiting).
+- The seed list produced ~4,537 unique autocomplete suggestions (Stage 1), well above the plan's ~500-2000 estimate — this is what drove Stage 2's longer real runtime above.
 - Score weights in Stage 3 (`config.py`) are a starting point, expected to need tuning after reading the first few real reports.
 
 ## Out-of-scope items
