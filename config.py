@@ -40,10 +40,28 @@ BREAKOUT_VIEWS_PER_DAY = 500         # Above this = recent breakout signal
 BREAKOUT_MAX_AGE_DAYS = 90           # Only count breakout if video is this young
 CHANNEL_FIT_KEYWORDS = [             # Your channel's territory — ideas matching
     "psychology", "evolution",        # these score higher on channel-fit
-    "human", "history", "why",
+    "human", "humans", "history", "why",
     "behaviour", "brain", "society",
     "money", "work", "body",
 ]
+# "humans" (plural) added alongside "human": word-boundary matching means
+# "human" alone does not match inside "humans", which would have zeroed
+# channel_fit on seeds like "why can't humans" / "why are humans" — exactly
+# the explanatory seeds this project wants to score well.
+
+# --- Stage 1 pre-search junk filter ---
+# Seeds that are short/generic enough to produce YouTube autocomplete
+# collisions with existing song/movie/game titles rather than genuine
+# video-idea phrasing (this is what happened with the old bare "don't"
+# seed — removed from seeds.txt entirely, 2026-08-21 relevance fix).
+# Suggestions originating ONLY from these seeds get extra scrutiny in
+# Stage 1, before the expensive search/caption/analysis stages run.
+WEAK_SEEDS = {
+    "never do",
+    "stop doing",
+    "you cannot",
+}
+JUNK_FILTER_MAX_WORDS = 4  # "very short" query threshold for the junk filter
 
 # --- Filtering ---
 SURVIVOR_TARGET = 30                 # Aim for roughly this many survivors

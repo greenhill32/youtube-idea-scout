@@ -94,7 +94,8 @@ Local-only tool, outbound-only network calls (YouTube autocomplete + yt-dlp + lo
 - Score weights in Stage 3 (`config.py`) are a starting point, expected to need tuning after reading the first few real reports.
 - Stage 3's `channel_fit` keyword match originally used a plain substring check (`kw in query_lower`), which matched "body" inside "nobody" — false-positiving channel_fit on every "nobody tells you" seed phrase (half the seed list), and it was inflating exactly the top-scored ideas in the first real test run. Fixed to word-boundary regex matching (`\bkw\b`).
 - Pipeline has been run against a 20-query subset and a 500-query subset of Stage 1's output (Lee's instructions, 2026-08-21) rather than the full ~4,537, to keep iteration fast. Full list preserved at `data/autocomplete_full_4537.json` for later use.
-- **Content-quality finding (500-query run, 2026-08-21):** 29/30 survivors came back with `channel_fit = 0.0`, and 28/30 were literally pop-culture titles ("don't stop me now", "don't look up", "don't starve") rather than video ideas — YouTube autocomplete matching the bare single-word seed `"don't"` against song/movie/game titles, which then scored high purely on demand+freshness+low-competition with nothing gating on topical relevance. This is the exact failure mode the build plan's success bar warns about. Two candidate fixes discussed but not applied yet, per Lee's choice to hold off until a full-scale run: (a) hard `channel_fit == 0` rejection in Stage 4, (b) drop/narrow the bare `"don't"` seed in `seeds.txt`. Revisit after the first full ~4,537-query run.
+- **Content-quality finding (500-query run, 2026-08-21) — FIXED same day.** 29/30 survivors came back with `channel_fit = 0.0`, mostly pop-culture titles ("don't stop me now", "don't look up") from the bare single-word seed `"don't"`. Fixed with three changes, verified on a 130-query smoke test: (1) removed `"don't"` from `seeds.txt`, added explanatory-framed seeds ("why do people", "what happens if humans", etc.); (2) Stage 4 now hard-rejects any idea with `channel_fit <= 0`, regardless of score — confirmed 0/30 survivors have zero fit afterward; (3) added a conservative pre-search junk filter in Stage 1 (short query + no channel-fit keyword + only ever produced by a seed in `WEAK_SEEDS`) that runs before the expensive search/caption/analysis stages. Result on the smoke test: ~19/20 top survivors are plausible explanatory ideas (up from ~1/20 in the 500-query run).
+- **Known limitations of the relevance fix:** the Stage 1 junk filter's word-count threshold (`JUNK_FILTER_MAX_WORDS = 4`) missed at least one real collision ("love will never do janet jackson lyrics", 6 words) — caught instead by the Stage 4 hard gate, so the two layers compensate for each other, but the length threshold alone isn't sufficient. Also, `CHANNEL_FIT_KEYWORDS` is narrow enough that some genuinely on-topic ideas score `channel_fit = 0` and get hard-rejected (e.g. "the real reason people talk over you and what to do about it" — clearly psychology-relevant but doesn't contain any literal keyword). Not fixed — flagged for future tuning, not blocking.
 
 ## Out-of-scope items
 
@@ -108,9 +109,9 @@ If a stage fails mid-run: `scout.py` prints which stage failed and the exact res
 
 ## Next 3 things
 
-1. Run the full ~4,537-query set end-to-end (est. ~2h36min, see 2026-08-21 timing run) and see whether the junk-survivor problem persists at full scale.
-2. Decide on and apply a fix for the channel_fit / junk-survivor problem (hard filter floor and/or seed refinement — see Known problems).
-3. Set up scheduled overnight execution (cron/systemd timer) once report quality is acceptable — not yet built (V2 item deferred during the build).
+1. Run a full-size batch (or the full ~4,537-query set) with the relevance fix in place and confirm survivor quality holds up beyond the 130-query smoke test.
+2. Consider widening `CHANNEL_FIT_KEYWORDS` and/or tuning `JUNK_FILTER_MAX_WORDS` based on what the larger run turns up (see Known limitations above) — hold off until there's more real data to tune against.
+3. Set up scheduled overnight execution (cron/systemd timer) once report quality is confirmed at scale — not yet built (V2 item deferred during the build).
 
 ## AI handoff instructions
 

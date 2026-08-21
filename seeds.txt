@@ -1,18 +1,33 @@
-# Question seeds — high search-intent
+# Question seeds — high search-intent, explanatory/curiosity framing
 why does
 why can't
 why is
+why do people
+why does the human body
+why can't humans
+why are humans
+why did people used to
+why do we still
+why is it so expensive to
 how much does
 what happens if
+what happens if humans
+what would happen if
 is it worth
 how can I
-don't
 
-# Clickbait / hook seeds — high click-intent
+# Clickbait / hook seeds — high click-intent, still topic-shaped
 you won't believe
-you cannot
+the real reason
+the real reason people
+nobody tells you
+what nobody tells you about
+what they don't teach
+
+# Weak/generic hook seeds — kept for breadth, but short & low-content
+# enough to collide with song/movie/game titles. Flagged as WEAK_SEEDS
+# in config.py so the Stage 1 junk filter scrutinises anything short
+# and topic-less that comes from these.
 never do
 stop doing
-the real reason
-nobody tells you
-what they don't teach
+you cannot

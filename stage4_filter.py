@@ -33,6 +33,13 @@ def passes_hard_rules(idea: dict) -> bool:
         return False  # Topic is too dead
     if signals.get("raw_video_count", 0) >= MAX_SATURATION_COUNT:
         return False  # Too saturated
+    if signals.get("channel_fit", 0) <= 0:
+        # Hard relevance gate (2026-08-21 relevance fix). Without this,
+        # ideas with zero topical connection to the channel could still
+        # survive on demand/freshness/competition alone — this is what let
+        # pop-culture title collisions ("don't stop me now") dominate the
+        # 2026-08-21 500-query survivor list despite being irrelevant.
+        return False
     return True
 
 

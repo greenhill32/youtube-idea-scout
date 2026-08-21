@@ -18,6 +18,7 @@ from config import (
     SEEDS_FILE, DATA_DIR,
     AUTOCOMPLETE_URL, AUTOCOMPLETE_PARAMS,
     AUTOCOMPLETE_SUFFIXES, AUTOCOMPLETE_DELAY_SECONDS,
+    CHANNEL_FIT_KEYWORDS, WEAK_SEEDS, JUNK_FILTER_MAX_WORDS,
 )
 
 
@@ -67,16 +68,55 @@ def fetch_autocomplete(seed: str, suffix: str) -> list[str]:
         return []
 
 
+def is_probable_junk(suggestion: str, origin_seeds: set[str]) -> bool:
+    """
+    Conservative pre-search junk filter (Stage 1, before the expensive
+    search/caption/analysis stages run).
+
+    Flags a suggestion as junk only if ALL of:
+      - it's short (<= JUNK_FILTER_MAX_WORDS words) — genuine explanatory
+        ideas tend to run longer than song/movie/game titles that
+        autocomplete surfaces for generic seeds;
+      - it contains none of CHANNEL_FIT_KEYWORDS — no topical anchor;
+      - every seed that produced it is in WEAK_SEEDS — i.e. it never
+        arose from an explanatory/specific seed, only a generic hook one.
+
+    Deliberately conservative: this is not a classifier, just a filter
+    for the specific failure mode seen in the 2026-08-21 500-query run
+    (bare "don't" + suffix -> pop-culture title collisions).
+    """
+    word_count = len(suggestion.split())
+    if word_count > JUNK_FILTER_MAX_WORDS:
+        return False
+
+    has_fit_keyword = any(
+        re.search(rf"\b{re.escape(kw)}\b", suggestion.lower())
+        for kw in CHANNEL_FIT_KEYWORDS
+    )
+    if has_fit_keyword:
+        return False
+
+    from_weak_seed_only = origin_seeds and origin_seeds.issubset(WEAK_SEEDS)
+    if not from_weak_seed_only:
+        return False
+
+    return True
+
+
 def run_autocomplete() -> list[str]:
     """
     Expand all seeds through autocomplete.
-    Returns deduplicated list of suggestions.
-    Writes results to data/autocomplete.json.
+    Applies a conservative junk filter (see is_probable_junk) before
+    writing output, so obvious title-collision noise from weak seeds
+    doesn't reach the expensive downstream stages.
+    Writes results to data/autocomplete.json (flat list of strings —
+    seed provenance is tracked in-memory for filtering only, not
+    persisted, so Stage 2's input contract is unchanged).
     """
     seeds = load_seeds(SEEDS_FILE)
     print(f"Stage 1: Expanding {len(seeds)} seeds x {len(AUTOCOMPLETE_SUFFIXES)} suffixes...")
 
-    all_suggestions: set[str] = set()
+    origins: dict[str, set[str]] = {}  # suggestion -> set of seeds that produced it
     total_queries = len(seeds) * len(AUTOCOMPLETE_SUFFIXES)
     done = 0
     warnings = 0
@@ -86,15 +126,24 @@ def run_autocomplete() -> list[str]:
             suggestions = fetch_autocomplete(seed, suffix)
             if not suggestions:
                 warnings += 1
-            all_suggestions.update(suggestions)
+            for s in suggestions:
+                origins.setdefault(s, set()).add(seed)
             done += 1
             if done % 50 == 0:
-                print(f"  {done}/{total_queries} queries done, {len(all_suggestions)} unique suggestions so far")
+                print(f"  {done}/{total_queries} queries done, {len(origins)} unique suggestions so far")
             time.sleep(AUTOCOMPLETE_DELAY_SECONDS)
 
-    results = sorted(all_suggestions)
-    print(f"Stage 1 complete: {len(results)} unique suggestions from {total_queries} queries "
+    all_suggestions = sorted(origins.keys())
+    junk = [s for s in all_suggestions if is_probable_junk(s, origins[s])]
+    results = [s for s in all_suggestions if s not in set(junk)]
+
+    print(f"Stage 1 raw: {len(all_suggestions)} unique suggestions from {total_queries} queries "
           f"({warnings} queries returned zero suggestions).")
+    print(f"Junk filter: {len(junk)} removed, {len(results)} kept.")
+    if junk:
+        print("Sample of filtered junk:")
+        for s in junk[:5]:
+            print(f"  - {s}  (from: {sorted(origins[s])})")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out_path = DATA_DIR / "autocomplete.json"
