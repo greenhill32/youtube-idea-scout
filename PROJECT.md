@@ -109,9 +109,9 @@ If a stage fails mid-run: `scout.py` prints which stage failed and the exact res
 
 ## Next 3 things
 
-1. Run a full-size batch (or the full ~4,537-query set) with the relevance fix in place and confirm survivor quality holds up beyond the 130-query smoke test.
-2. Consider widening `CHANNEL_FIT_KEYWORDS` and/or tuning `JUNK_FILTER_MAX_WORDS` based on what the larger run turns up (see Known limitations above) — hold off until there's more real data to tune against.
-3. Set up scheduled overnight execution (cron/systemd timer) once report quality is confirmed at scale — not yet built (V2 item deferred during the build).
+1. **Run the full ~4,537-query set for real, planned for 2026-08-22.** Relevance fix is in place and smoke-tested; this is the first full-scale production run. Est. ~2h36min end to end (see 2026-08-21 timing run) — run via `python scout.py` (not manual per-stage calls) so the untested single-command full-run path gets exercised too. Fits comfortably unattended/overnight.
+2. Consider widening `CHANNEL_FIT_KEYWORDS` and/or tuning `JUNK_FILTER_MAX_WORDS` based on what the full run turns up (see Known limitations above) — hold off until there's more real data to tune against.
+3. Set up scheduled overnight execution (cron/systemd timer) once report quality is confirmed at full scale — not yet built (V2 item deferred during the build).
 
 ## AI handoff instructions
 
