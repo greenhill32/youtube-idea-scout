@@ -92,6 +92,8 @@ Local-only tool, outbound-only network calls (YouTube autocomplete + yt-dlp + lo
 - Stage 2 does **not** use `--flat-playlist`, unlike the build plan's initial draft. Smoke-tested it first: `upload_date` and `channel_follower_count` came back empty on 60/60 videos, which would have silently zeroed Stage 3's demand/freshness/breakout scoring for every idea. Switched to full-resolution yt-dlp calls per the plan's own documented fallback. Cost: ~7s/query instead of near-instant, so Stage 2 on the real ~4,500-query autocomplete set takes ~2-2.5 hours instead of the plan's 15-30 min estimate (still fine for an overnight run; MAX_CONCURRENT_SEARCHES=4 kept conservative to avoid YouTube rate-limiting).
 - The seed list produced ~4,537 unique autocomplete suggestions (Stage 1), well above the plan's ~500-2000 estimate — this is what drove Stage 2's longer real runtime above.
 - Score weights in Stage 3 (`config.py`) are a starting point, expected to need tuning after reading the first few real reports.
+- Stage 3's `channel_fit` keyword match originally used a plain substring check (`kw in query_lower`), which matched "body" inside "nobody" — false-positiving channel_fit on every "nobody tells you" seed phrase (half the seed list), and it was inflating exactly the top-scored ideas in the first real test run. Fixed to word-boundary regex matching (`\bkw\b`).
+- Pipeline is currently being run against a 20-query subset of Stage 1's output (Lee's instruction, 2026-08-21) rather than the full ~4,537, to keep the stage-gated build loop fast. Full list preserved at `data/autocomplete_full_4537.json` for later use.
 
 ## Out-of-scope items
 
