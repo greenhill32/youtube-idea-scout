@@ -93,7 +93,8 @@ Local-only tool, outbound-only network calls (YouTube autocomplete + yt-dlp + lo
 - The seed list produced ~4,537 unique autocomplete suggestions (Stage 1), well above the plan's ~500-2000 estimate — this is what drove Stage 2's longer real runtime above.
 - Score weights in Stage 3 (`config.py`) are a starting point, expected to need tuning after reading the first few real reports.
 - Stage 3's `channel_fit` keyword match originally used a plain substring check (`kw in query_lower`), which matched "body" inside "nobody" — false-positiving channel_fit on every "nobody tells you" seed phrase (half the seed list), and it was inflating exactly the top-scored ideas in the first real test run. Fixed to word-boundary regex matching (`\bkw\b`).
-- Pipeline is currently being run against a 20-query subset of Stage 1's output (Lee's instruction, 2026-08-21) rather than the full ~4,537, to keep the stage-gated build loop fast. Full list preserved at `data/autocomplete_full_4537.json` for later use.
+- Pipeline has been run against a 20-query subset and a 500-query subset of Stage 1's output (Lee's instructions, 2026-08-21) rather than the full ~4,537, to keep iteration fast. Full list preserved at `data/autocomplete_full_4537.json` for later use.
+- **Content-quality finding (500-query run, 2026-08-21):** 29/30 survivors came back with `channel_fit = 0.0`, and 28/30 were literally pop-culture titles ("don't stop me now", "don't look up", "don't starve") rather than video ideas — YouTube autocomplete matching the bare single-word seed `"don't"` against song/movie/game titles, which then scored high purely on demand+freshness+low-competition with nothing gating on topical relevance. This is the exact failure mode the build plan's success bar warns about. Two candidate fixes discussed but not applied yet, per Lee's choice to hold off until a full-scale run: (a) hard `channel_fit == 0` rejection in Stage 4, (b) drop/narrow the bare `"don't"` seed in `seeds.txt`. Revisit after the first full ~4,537-query run.
 
 ## Out-of-scope items
 
@@ -107,9 +108,9 @@ If a stage fails mid-run: `scout.py` prints which stage failed and the exact res
 
 ## Next 3 things
 
-1. Build and verify Stage 1 (`stage1_autocomplete.py`) — run against real `seeds.txt`, confirm `data/autocomplete.json` has hundreds of unique suggestions.
-2. Build and verify Stage 2 (`stage2_search.py`) against Stage 1's real output.
-3. Continue stage-by-stage per the build plan through Stage 7, stopping for confirmation after each PASS.
+1. Run the full ~4,537-query set end-to-end (est. ~2h36min, see 2026-08-21 timing run) and see whether the junk-survivor problem persists at full scale.
+2. Decide on and apply a fix for the channel_fit / junk-survivor problem (hard filter floor and/or seed refinement — see Known problems).
+3. Set up scheduled overnight execution (cron/systemd timer) once report quality is acceptable — not yet built (V2 item deferred during the build).
 
 ## AI handoff instructions
 
