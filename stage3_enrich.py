@@ -12,7 +12,6 @@ All scoring is deterministic Python. No LLM, no network calls.
 """
 
 import json
-import re
 from datetime import datetime, timezone
 from collections import defaultdict
 from config import (
@@ -21,8 +20,9 @@ from config import (
     MAX_SATURATION_COUNT,
     BREAKOUT_VIEWS_PER_DAY,
     BREAKOUT_MAX_AGE_DAYS,
-    CHANNEL_FIT_KEYWORDS,
+    COMPETITION_FIELD_VPD_CAP,
 )
+from common import channel_fit_score, current_run_id
 
 
 def parse_upload_date(date_str: str) -> datetime | None:
@@ -71,7 +71,7 @@ def compute_idea_score(query: str, videos: list[dict]) -> tuple[float, dict]:
 
     Signals:
     - demand: are people watching videos on this topic? (views/day of best video)
-    - competition: how many videos already exist? (lower is better)
+    - competition: how strong is the whole competing field, not just one video?
     - breakout: any recent breakout videos? (suggests rising interest)
     - channel_fit: does the query match your channel's territory?
     - freshness: is the best-performing video old? (old = stale = opportunity)
@@ -83,24 +83,27 @@ def compute_idea_score(query: str, videos: list[dict]) -> tuple[float, dict]:
     video_count = len(videos)
     has_breakout = any(v.get("is_breakout", False) for v in videos)
     oldest_top_video_days = max(
-        (v.get("age_days", 0) or 0) for v in videos
-        if (v.get("view_count", 0) or 0) > 0
-    ) if videos else 0
-
-    query_lower = query.lower()
-    # Word-boundary match — a naive substring check would match "body" inside
-    # "nobody", which false-positived channel_fit on every "nobody tells you"
-    # seed phrase (half the seed list) during Stage 3 smoke testing.
-    fit_matches = sum(
-        1 for kw in CHANNEL_FIT_KEYWORDS
-        if re.search(rf"\b{re.escape(kw)}\b", query_lower)
+        ((v.get("age_days", 0) or 0) for v in videos
+         if (v.get("view_count", 0) or 0) > 0),
+        default=0,
     )
+
+    channel_fit = channel_fit_score(query)
 
     # Normalise each signal to 0-1 range
     demand = min(best_vpd / 2000, 1.0)            # 2000 vpd = max demand signal
-    competition = max(1 - (video_count / MAX_SATURATION_COUNT), 0)
+    # Competition (v0.2 rework): the old signal was 1 - video_count/20, but
+    # MAX_SEARCH_RESULTS_PER_QUERY caps every search at 5 results, so
+    # video_count was ~5 for 99.6% of ideas — a near-constant that
+    # contributed a fixed +0.15 to every score and discriminated nothing
+    # (64 ideas tied at the resulting 0.95 ceiling in the 2026-08-21 run).
+    # Instead, measure how strong the whole field is performing (average
+    # views/day across all returned videos, not just the best one): a
+    # field where every video does well is genuinely saturated; a field
+    # with one breakout and four weak videos still has room.
+    avg_field_vpd = sum(v.get("views_per_day", 0) or 0 for v in videos) / video_count
+    competition = round(max(1 - min(avg_field_vpd / COMPETITION_FIELD_VPD_CAP, 1.0), 0), 3)
     breakout = 1.0 if has_breakout else 0.0
-    channel_fit = min(fit_matches / 2, 1.0)        # 2+ keyword matches = full fit
     freshness = min(oldest_top_video_days / 365, 1.0)  # Older top videos = more opportunity
 
     signals = {
@@ -132,6 +135,8 @@ def run_enrichment() -> list[dict]:
     Deduplicates videos by video ID across queries.
     Writes data/enriched.json.
     """
+    print(f"Run ID: {current_run_id(DATA_DIR)}")
+
     with open(DATA_DIR / "search_results.json") as f:
         search_results = json.load(f)
 
@@ -162,8 +167,13 @@ def run_enrichment() -> list[dict]:
             "videos": unique_videos,
         })
 
-    # Sort by score descending
-    enriched_ideas.sort(key=lambda x: x["idea_score"], reverse=True)
+    # Sort by score descending, tie-broken alphabetically by query (v0.2).
+    # The old sort-by-score-only left ties in whatever order they arrived
+    # in enriched_ideas, which traces back to search_results.json's key
+    # order — itself an artefact of which of Stage 2's worker threads
+    # happened to finish first. Same input now always yields the same
+    # ranking, regardless of thread completion order.
+    enriched_ideas.sort(key=lambda x: (-x["idea_score"], x["query"]))
 
     print(f"Stage 3 complete: {len(enriched_ideas)} ideas scored.")
 

@@ -1,0 +1,231 @@
+YOUTUBE IDEA SCOUT — ENGINEERING MEMORY
+========================================
+
+This file is NOT a run log. Normal, expected pipeline output (queries
+searched, captions unavailable, ideas REJECTed, fallback triggered,
+fewer than MAX_REPORT_IDEAS produced) belongs in the console output,
+report.html, and run_history.jsonl — not here.
+
+Add an entry here only when something indicates:
+  - a pipeline malfunction
+  - unexpected systemic behaviour
+  - an incorrect classification pattern
+  - a data mismatch between stages
+  - repeated parsing failures
+  - relevance/territory leakage
+  - a quality regression
+  - a newly-discovered architectural weakness
+  - a human/Scout disagreement worth watching for a repeated pattern
+
+Before modifying a stage, read this file for previous issues concerning
+that stage. Do not knowingly reintroduce a previously resolved problem.
+When a new fix contradicts an earlier decision, record why the earlier
+approach was superseded — don't just delete it. Do not delete historical
+resolved entries; append a RESOLUTION entry that references the original.
+
+========================================
+
+
+============================================================
+2026-08-21 | run_id: (pre-run_id, 2026-08-21 production run)
+STATUS: RESOLVED
+AREA: Stage 5/6 caption handoff
+SEVERITY: HIGH
+
+PROBLEM:
+Stage 5 downloaded competitor captions sorted by view_count descending.
+Stage 6 read captions using the original (unsorted) search-result order.
+Different sets, same nominal "top N" — most of the time they picked
+different videos entirely.
+
+EVIDENCE:
+33/90 (37%) of the transcript slots in Stage 6's prompts were empty
+("(no captions available)") despite the caption file existing on disk,
+in the 2026-08-21 4,537-query production run.
+
+FIX (v0.2, 2026-08-22):
+Created common.select_competitor_videos(idea, n) — one shared definition
+of "top N competitor videos" for an idea, imported by both Stage 5 and
+Stage 6. They cannot diverge; it's the same function call on the same
+data.
+
+VERIFICATION:
+0/30 selection mismatches when re-checked against the old production
+survivors.json. 0/60 missing caption slots on the v0.2 500-query live
+verification run (vs. 37% before).
+
+LESSON:
+Where two pipeline stages must operate on the same subset of a shared
+list, the selection logic must have exactly one implementation, imported
+by both — not two independently-written "should be equivalent" sorts.
+============================================================
+
+
+============================================================
+2026-08-21 | run_id: (pre-run_id, 2026-08-21 production run)
+STATUS: RESOLVED
+AREA: Stage 3 scoring — composite score ceiling
+SEVERITY: HIGH
+
+PROBLEM:
+The `competition` signal was `1 - video_count/MAX_SATURATION_COUNT`, but
+Stage 2 caps every search at MAX_SEARCH_RESULTS_PER_QUERY=5 results, so
+video_count was ~5 for 99.6% of ideas — a near-constant contributing a
+fixed +0.15 to every score. Composite score could never exceed 0.95.
+
+EVIDENCE:
+64 of 6,028 ideas in the 2026-08-21 production run scored exactly 0.95
+(the ceiling). Survivor selection took the first 30 of those 64 in
+enriched.json order, which traced back to Stage 2's search_results.json
+key order -- itself an artefact of which of the 4 worker threads
+happened to finish first. Re-running on the same data could have
+returned a different 30 survivors.
+
+FIX (v0.2, 2026-08-22):
+`competition` now measures the average views/day across the WHOLE
+competing field (not just the top result), normalised against
+COMPETITION_FIELD_VPD_CAP. Final Stage 3 sort changed to
+`(-idea_score, query)` — deterministic tiebreak, independent of thread
+completion order.
+
+VERIFICATION:
+Re-scored the full 6,028-idea production dataset with the new logic:
+distinct score values rose from 2,017 to 2,314; max-score ties dropped
+from 64 to 1. Shuffled the input dict order and re-ran scoring -- ranking
+was byte-identical to the unshuffled run.
+
+LESSON:
+A "competition" or "saturation" signal derived from a count that is
+itself capped by a fixed query parameter (MAX_SEARCH_RESULTS_PER_QUERY)
+will silently degenerate into a constant. Check the actual value
+distribution of every signal before trusting a composite score built
+from it -- a signal that never varies is worse than one that's merely
+noisy, because it hides inside a plausible-looking weighted sum.
+============================================================
+
+
+============================================================
+2026-08-21 | run_id: (pre-run_id, 2026-08-21 production run)
+STATUS: RESOLVED
+AREA: Stage 1/3/4 channel_fit — "why" domination
+SEVERITY: HIGH
+
+PROBLEM:
+CHANNEL_FIT_KEYWORDS was an unweighted list including "why". Two matches
+maxed channel_fit at 1.0. "why" matched 45.9% of all Stage 1 output on
+its own (it's query-structure framing, not topic); paired with "humans"
+(8.7%) it maxed channel_fit for any "why are humans..." query regardless
+of actual subject matter. psychology/evolution/behaviour -- the terms
+that actually describe the channel -- fired ZERO times in the whole
+production run.
+
+EVIDENCE:
+28 of 30 report cards in the 2026-08-21 production run were "why are
+humans [X]" phrasings; 5 of those were near-duplicate "apex predator"
+framings of the same underlying video idea.
+
+FIX (v0.2, 2026-08-22):
+CHANNEL_FIT_KEYWORDS is now a weighted dict. "why" carries zero weight
+by design -- deliberately excluded, not just down-weighted. Specific
+topical terms (psychology, evolution, behaviour = 0.9-1.0) outweigh
+broad ones (human/humans/body = 0.4-0.5). Logic lives once, in
+common.channel_fit_score(), shared between Stage 1's pre-search gate
+and Stage 3's scoring signal.
+
+VERIFICATION:
+channel_fit_score("why are humans apex predators") -> 0.417 (was 1.0).
+channel_fit_score("why does psychology explain human behaviour") -> 1.0
+(correctly still maxes). On the v0.2 live run, a query hitting "brain"
+(weight 0.8) scored channel_fit 1.0 while plain "why are humans X"
+queries scored 0.417 -- topical terms now outrank generic phrasing.
+
+LESSON:
+A keyword-count relevance signal degenerates toward whichever word is
+structurally common in the seed list, not whichever word is topically
+meaningful. Weighting by specificity (and explicitly zero-weighting
+query-structure words) is cheap and fixes this; an unweighted OR-match
+list does not scale past a handful of very carefully chosen terms.
+============================================================
+
+
+============================================================
+2026-08-22 | run_id: (v0.2 500-query verification run)
+STATUS: OPEN
+AREA: Editorial relevance — franchise/pop-culture territory leakage
+SEVERITY: MEDIUM
+
+PROBLEM:
+Two survivors in the v0.2 500-query live verification run were
+franchise/pop-culture title collisions rather than genuine channel
+content: "why are humans killing autobots in age of extinction"
+(Transformers) and "why are humans in star wars". Both passed the
+Stage 1/Stage 4 channel_fit gate only because the literal word "humans"
+appears in the phrase (channel_fit = 0.417, same tier as many
+legitimately on-topic queries) -- there is no mechanism that
+distinguishes "humans" used topically from "humans" used incidentally
+inside franchise lore.
+
+EVIDENCE:
+Present in data/survivors.json from the v0.2 verification run
+(2026-08-22, before run_id existed). Flagged in opus_report.md and the
+v0.2 verification report as a known residual limitation, explicitly out
+of scope for v0.2 (which targeted the "why"+"humans" over-weighting
+specifically, not pop-culture noise generally).
+
+NEXT ACTION (superseded by v0.21, see RESOLUTION entries below if this
+run's veto worked):
+Verify whether the v0.21 Stage 6 editorial gate (explicit GAP/FIT veto
+rules, "does not belong to the intended scout/content territory" ->
+REJECT regardless of demand/hook/makeability) reliably rejects this
+general class of franchise/search collision, before changing Stage 1's
+cheap keyword gate to try to catch it structurally instead.
+============================================================
+
+
+============================================================
+2026-08-22 | run_id: 20260822-0825
+STATUS: RESOLVED (via editorial gate, not via Stage 1 keyword changes)
+AREA: Editorial relevance — franchise/pop-culture territory leakage
+SEVERITY: MEDIUM
+RESOLVES: the OPEN entry above (2026-08-22, franchise/pop-culture leakage)
+
+FIX:
+v0.21 added an explicit editorial veto to the Stage 6 prompt: "A
+candidate MUST be REJECT if it does not belong to the intended
+scout/content territory, regardless of demand, hook or makeability" --
+plus a required `fit_assessment` field the model must justify. This
+sits downstream of Stage 1's cheap channel_fit_score() keyword gate
+(unchanged, still lets these through) and catches what the keyword gate
+structurally cannot: "humans" appearing in a phrase that is actually
+about franchise lore, not the channel's real subject.
+
+VERIFICATION:
+Re-ran the exact same 20 survivors (same run, same enriched.json/
+survivors.json as the OPEN entry above) through the new Stage 6.
+Both flagged candidates were REJECTed:
+  "why are humans killing autobots in age of extinction"
+    -> gap_assessment: inadequate, fit_assessment: inadequate
+    -> reasoning: "franchise/film analysis, not human psychology
+       explainer content"
+  "why are humans in star wars"
+    -> gap_assessment: inadequate, fit_assessment: inadequate
+    -> reasoning: "off-territory for the query"
+Full run: 20 evaluated, 14 MAKE / 6 REJECT, 0 editorial evaluation
+failures. The veto also caught territory drift the OPEN entry hadn't
+anticipated (e.g. "why are humans created" -> REJECT, fit=inadequate,
+"fundamentally metaphysical... belongs to theology/philosophy
+territory") and a genuine no-gap case despite strong fit ("why are
+humans monogamous" -> REJECT, gap=inadequate, fit=adequate, existing
+competitors already cover the question from every angle).
+
+LESSON:
+A cheap keyword-based gate (Stage 1's channel_fit_score) is the right
+tool for pruning obviously-irrelevant queries before an expensive
+network search, but it cannot distinguish topical use of a word from
+incidental use ("humans" in a psychology query vs. "humans" inside
+Transformers lore). That distinction needs semantic judgement -- an
+LLM editorial gate downstream, evaluated per-candidate against actual
+competitor content, not a wider keyword list upstream. Keep the cheap
+gate cheap; do the semantic work only on the small number of survivors
+that reach Stage 6.
+============================================================

@@ -18,6 +18,7 @@ from config import (
     MAX_CONCURRENT_SEARCHES,
     SEARCH_TIMEOUT_SECONDS,
 )
+from common import current_run_id
 
 
 def search_youtube(query: str) -> list[dict]:
@@ -84,6 +85,9 @@ def run_search() -> dict[str, list[dict]]:
     Returns dict mapping query → list of video metadata.
     Writes results to data/search_results.json.
     """
+    run_id = current_run_id(DATA_DIR)
+    print(f"Run ID: {run_id}")
+
     with open(DATA_DIR / "autocomplete.json") as f:
         queries = json.load(f)
 
@@ -120,6 +124,15 @@ def run_search() -> dict[str, list[dict]]:
         json.dump(results, f, indent=2)
 
     print(f"Wrote {out_path} ({len(results)} queries, {total_videos} videos)")
+
+    stats_path = DATA_DIR / "stage2_stats.json"
+    with open(stats_path, "w") as f:
+        json.dump({
+            "run_id": run_id,
+            "queries_searched": len(queries),
+            "videos_found": total_videos,
+            "zero_result_queries": zero_result_queries,
+        }, f, indent=2)
 
     sample_queries = list(results.keys())[:3]
     print("Sample:")

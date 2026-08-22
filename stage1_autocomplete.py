@@ -20,6 +20,7 @@ from config import (
     AUTOCOMPLETE_SUFFIXES, AUTOCOMPLETE_DELAY_SECONDS,
     CHANNEL_FIT_KEYWORDS, WEAK_SEEDS, JUNK_FILTER_MAX_WORDS,
 )
+from common import channel_fit_score, start_run
 
 
 def load_seeds(path: Path) -> list[str]:
@@ -113,6 +114,9 @@ def run_autocomplete() -> list[str]:
     seed provenance is tracked in-memory for filtering only, not
     persisted, so Stage 2's input contract is unchanged).
     """
+    run_id = start_run(DATA_DIR)
+    print(f"Run ID: {run_id}")
+
     seeds = load_seeds(SEEDS_FILE)
     print(f"Stage 1: Expanding {len(seeds)} seeds x {len(AUTOCOMPLETE_SUFFIXES)} suffixes...")
 
@@ -135,15 +139,29 @@ def run_autocomplete() -> list[str]:
 
     all_suggestions = sorted(origins.keys())
     junk = [s for s in all_suggestions if is_probable_junk(s, origins[s])]
-    results = [s for s in all_suggestions if s not in set(junk)]
+    after_junk_filter = [s for s in all_suggestions if s not in set(junk)]
 
     print(f"Stage 1 raw: {len(all_suggestions)} unique suggestions from {total_queries} queries "
           f"({warnings} queries returned zero suggestions).")
-    print(f"Junk filter: {len(junk)} removed, {len(results)} kept.")
+    print(f"Junk filter: {len(junk)} removed, {len(after_junk_filter)} kept.")
     if junk:
         print("Sample of filtered junk:")
         for s in junk[:5]:
             print(f"  - {s}  (from: {sorted(origins[s])})")
+
+    # Query-only eligibility gate (v0.2): channel_fit is computable from the
+    # query text alone, with no video/network data. Reject zero-fit queries
+    # here, before Stage 2 spends a search on them — in the 2026-08-21 run,
+    # 50.7% of Stage 1 output had zero channel_fit and was guaranteed to be
+    # rejected at Stage 4 anyway, after ~93 minutes of wasted searching.
+    zero_fit = [s for s in after_junk_filter if channel_fit_score(s) <= 0]
+    results = [s for s in after_junk_filter if channel_fit_score(s) > 0]
+    print(f"Query-only channel-fit gate: {len(zero_fit)} rejected (zero topical fit), "
+          f"{len(results)} eligible for search.")
+    if zero_fit:
+        print("Sample rejected (zero channel-fit):")
+        for s in zero_fit[:5]:
+            print(f"  - {s}")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out_path = DATA_DIR / "autocomplete.json"
@@ -151,6 +169,16 @@ def run_autocomplete() -> list[str]:
         json.dump(results, f, indent=2)
 
     print(f"Wrote {out_path} ({len(results)} items)")
+
+    stats_path = DATA_DIR / "stage1_stats.json"
+    with open(stats_path, "w") as f:
+        json.dump({
+            "run_id": run_id,
+            "raw_suggestions": len(all_suggestions),
+            "after_junk_filter": len(after_junk_filter),
+            "zero_fit_rejected": len(zero_fit),
+            "queries_generated": len(results),
+        }, f, indent=2)
     sample = results[:5] if len(results) >= 5 else results
     print("Sample:")
     for s in sample:

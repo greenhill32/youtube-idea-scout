@@ -14,6 +14,8 @@ CAPTIONS_DIR = DATA_DIR / "captions"
 ANALYSES_DIR = DATA_DIR / "analyses"
 REPORT_FILE = DATA_DIR / "report.html"
 TEMPLATE_DIR = PROJECT_ROOT / "templates"
+PROGRESS_FILE = PROJECT_ROOT / "progress.txt"        # engineering memory, not a run log
+RUN_HISTORY_FILE = PROJECT_ROOT / "run_history.jsonl"  # one line per completed run
 
 # --- Autocomplete ---
 AUTOCOMPLETE_SUFFIXES = list("abcdefghijklmnopqrstuvwxyz") + [""]
@@ -38,16 +40,35 @@ MIN_VIEWS_PER_DAY = 50               # Below this = too dead to bother
 MAX_SATURATION_COUNT = 20            # More than this many competing videos = saturated
 BREAKOUT_VIEWS_PER_DAY = 500         # Above this = recent breakout signal
 BREAKOUT_MAX_AGE_DAYS = 90           # Only count breakout if video is this young
-CHANNEL_FIT_KEYWORDS = [             # Your channel's territory — ideas matching
-    "psychology", "evolution",        # these score higher on channel-fit
-    "human", "humans", "history", "why",
-    "behaviour", "brain", "society",
-    "money", "work", "body",
-]
-# "humans" (plural) added alongside "human": word-boundary matching means
-# "human" alone does not match inside "humans", which would have zeroed
-# channel_fit on seeds like "why can't humans" / "why are humans" — exactly
-# the explanatory seeds this project wants to score well.
+COMPETITION_FIELD_VPD_CAP = 2000     # views/day at which the whole field counts as "saturated"
+
+# Weighted, topical channel-fit terms (v0.2 relevance rework, 2026-08-22).
+# "why" is deliberately ABSENT: in the 2026-08-21 production run it matched
+# 45.9% of all Stage 1 output on its own (it's query-structure framing, not
+# topic), and paired with "humans" (8.7%) it maxed out channel_fit for any
+# "why are humans..." query regardless of actual subject matter — that's
+# why 28/30 report cards came back as one phrase. Specific topical terms
+# (psychology, evolution, behaviour...) now carry more weight than broad
+# ones (human, humans, body), so two generic hits can no longer outscore
+# one genuinely on-topic term.
+CHANNEL_FIT_KEYWORDS = {
+    "psychology": 1.0,
+    "evolution": 1.0,
+    "evolutionary": 1.0,
+    "behaviour": 0.9,
+    "behavior": 0.9,
+    "brain": 0.8,
+    "society": 0.7,
+    "societal": 0.7,
+    "history": 0.6,
+    "historical": 0.6,
+    "human": 0.5,
+    "humans": 0.5,
+    "body": 0.4,
+    "money": 0.4,
+    "work": 0.3,
+}
+CHANNEL_FIT_TARGET = 1.2  # weighted sum needed for a full 1.0 channel_fit score
 
 # --- Stage 1 pre-search junk filter ---
 # Seeds that are short/generic enough to produce YouTube autocomplete
@@ -64,23 +85,38 @@ WEAK_SEEDS = {
 JUNK_FILTER_MAX_WORDS = 4  # "very short" query threshold for the junk filter
 
 # --- Filtering ---
-SURVIVOR_TARGET = 30                 # Aim for roughly this many survivors
-MIN_SCORE_THRESHOLD = 0.4           # Normalised 0-1; below this = reject
-USE_LOCAL_LLM_FILTER = False         # Set True to enable local LLM as tiebreaker
-LOCAL_LLM_MODEL = "llama3"           # Ollama model name if local LLM is enabled
-LOCAL_LLM_URL = "http://localhost:11434/api/generate"
+# MAX_REPORT_IDEAS is a CAP, not a target (v0.2). Every distinct opportunity
+# must independently clear MIN_SCORE_THRESHOLD; the report shows however
+# many qualify, up to this cap. The threshold is never lowered to fill slots.
+MAX_REPORT_IDEAS = 20
+MIN_SCORE_THRESHOLD = 0.4            # Normalised 0-1; below this = reject
+NEAR_DUPLICATE_OVERLAP_THRESHOLD = 0.4  # competing-video overlap fraction that
+                                         # merges two ideas into one opportunity
+FALLBACK_CANDIDATE_COUNT = 3         # shown, clearly labelled, when zero ideas
+                                      # clear MIN_SCORE_THRESHOLD
 
 # --- Captions ---
 MAX_CAPTION_VIDEOS_PER_IDEA = 3     # Pull captions from top N competitors per idea
 CAPTION_TIMEOUT_SECONDS = 30         # per-video yt-dlp subtitle timeout
 CAPTION_LANGUAGES = ["en", "en-GB"]  # Preferred subtitle languages, in order
 
-# --- Gap Analysis ---
+# --- Gap Analysis / Editorial Judgement ---
 # Primary: Claude Code CLI (subscription-based, no API billing)
 ANALYSIS_PROVIDER = "claude"         # "claude" or "codex"
 CLAUDE_MODEL = os.getenv("SCOUT_MODEL", "haiku")  # configurable via env var
 # Fallback (not wired in V1 — placeholder for later):
 # CODEX_MODEL = "gpt-5"
 
+# What Stage 6 judges "fit" against — kept as one string so the prompt's
+# territory definition can't drift from what a human would recognise as
+# on-channel. Not the same mechanism as channel_fit_score() (that's a
+# cheap keyword proxy used pre-search in Stage 1/3); this is the LLM's
+# actual editorial judgement call in Stage 6.
+CHANNEL_DESCRIPTION = (
+    "a channel about human psychology, evolution, history, and "
+    "\"why do humans do this?\" explainer content"
+)
+
 # --- Report ---
-MAX_IDEAS_IN_REPORT = 30             # Cap the final report length
+# (report length is governed by MAX_REPORT_IDEAS above — Stage 4 already
+# caps survivors.json, so Stage 7 doesn't need its own separate limit)

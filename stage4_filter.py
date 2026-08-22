@@ -1,157 +1,188 @@
 """
-Stage 4: Filter enriched ideas down to survivors.
+Stage 4: Filter enriched ideas down to report-worthy survivors.
 
 Input:  data/enriched.json
-Output: data/survivors.json — the top ideas worth analysing further
+Output: data/survivors.json — the ideas worth analysing further
+        data/filter_stats.json — funnel counts for Stage 7's summary block
 
-Filtering strategy:
-1. Hard Python rules (score threshold, minimum demand, saturation cap)
-2. If too many remain, take top N by score
-3. Optional: local LLM tiebreaker for borderline cases (off by default)
+Pipeline (v0.2):
+1. Eligibility — deterministic structural rules, no score bar (channel
+   relevance, minimum demand, saturation cap).
+2. Near-duplicate clustering — collapse ideas that are the same
+   underlying opportunity in different phrasing.
+3. Quality threshold — every distinct opportunity must independently
+   clear MIN_SCORE_THRESHOLD. MAX_REPORT_IDEAS is a cap on how many of
+   those qualifying ideas get shown, never a target to fill.
+4. Zero-result fallback — if nothing clears the quality bar, show the
+   best few candidates anyway, clearly labelled as not having qualified.
 """
 
 import json
-import subprocess
 from config import (
     DATA_DIR,
-    SURVIVOR_TARGET,
+    MAX_REPORT_IDEAS,
     MIN_SCORE_THRESHOLD,
     MIN_VIEWS_PER_DAY,
     MAX_SATURATION_COUNT,
-    USE_LOCAL_LLM_FILTER,
-    LOCAL_LLM_MODEL,
-    LOCAL_LLM_URL,
+    NEAR_DUPLICATE_OVERLAP_THRESHOLD,
+    FALLBACK_CANDIDATE_COUNT,
 )
+from common import current_run_id
 
 
-def passes_hard_rules(idea: dict) -> bool:
-    """Apply deterministic rejection rules."""
-    if idea["idea_score"] < MIN_SCORE_THRESHOLD:
-        return False
+def passes_eligibility(idea: dict) -> bool:
+    """Structural legitimacy only — not a quality judgement, no score bar."""
     signals = idea.get("signals", {})
+    if signals.get("channel_fit", 0) <= 0:
+        # Hard relevance gate (2026-08-21 relevance fix, carried into v0.2
+        # unchanged). channel_fit is now weighted/topical rather than a
+        # raw "why"+"humans" count, but the gate logic is the same: zero
+        # topical connection to the channel is disqualifying.
+        return False
     if signals.get("raw_best_vpd", 0) < MIN_VIEWS_PER_DAY:
         return False  # Topic is too dead
     if signals.get("raw_video_count", 0) >= MAX_SATURATION_COUNT:
         return False  # Too saturated
-    if signals.get("channel_fit", 0) <= 0:
-        # Hard relevance gate (2026-08-21 relevance fix). Without this,
-        # ideas with zero topical connection to the channel could still
-        # survive on demand/freshness/competition alone — this is what let
-        # pop-culture title collisions ("don't stop me now") dominate the
-        # 2026-08-21 500-query survivor list despite being irrelevant.
-        return False
     return True
 
 
-def local_llm_filter(borderline_ideas: list[dict]) -> list[dict]:
+def passes_quality(idea: dict) -> bool:
+    """The final quality bar. Never lowered to fill report slots."""
+    return idea["idea_score"] >= MIN_SCORE_THRESHOLD
+
+
+def _video_signature(idea: dict) -> frozenset:
+    return frozenset(v.get("id") for v in idea.get("videos", []) if v.get("id"))
+
+
+def dedupe_near_duplicates(ideas: list[dict]) -> list[dict]:
     """
-    Optional: ask a local LLM (via Ollama) to pick the best from borderline ideas.
-    Only called when USE_LOCAL_LLM_FILTER is True and there are too many survivors.
+    Collapse ideas that are the same underlying opportunity in different
+    phrasing, e.g. "why are humans apex predators" / "why are humans
+    considered apex predators" / "why are humans top of the food chain".
+    These share no useful token overlap ("apex predator" and "top of the
+    food chain" are synonyms, not shared words) so word-overlap dedup
+    would miss them. Instead this uses competing-video overlap: if two
+    queries' top search results are substantially the same videos, they
+    are the same real-world opportunity, regardless of phrasing — a
+    deterministic signal already present in the data, no LLM needed.
 
-    The LLM receives a numbered list of idea queries with their scores
-    and returns the indices of the ones worth keeping.
+    `ideas` must already be sorted best-first (score desc, then query —
+    see Stage 3). The first idea in a cluster becomes the representative;
+    the rest are folded in as alternate_phrasings. Because the ordering
+    is deterministic, so is which idea becomes the representative.
     """
-    if not borderline_ideas:
-        return []
+    representatives: list[dict] = []
+    signatures: list[frozenset] = []
 
-    # Build a concise prompt — just queries and scores, no video details
-    idea_list = "\n".join(
-        f"{i+1}. \"{idea['query']}\" (score: {idea['idea_score']}, "
-        f"demand: {idea['signals'].get('demand', '?')}, "
-        f"competition: {idea['signals'].get('competition', '?')})"
-        for i, idea in enumerate(borderline_ideas)
-    )
+    for idea in ideas:
+        sig = _video_signature(idea)
+        matched_index = None
+        if sig:
+            for i, rep_sig in enumerate(signatures):
+                union = sig | rep_sig
+                if not union:
+                    continue
+                overlap = len(sig & rep_sig) / len(union)
+                if overlap >= NEAR_DUPLICATE_OVERLAP_THRESHOLD:
+                    matched_index = i
+                    break
 
-    prompt = f"""You are filtering YouTube video ideas. Below is a numbered list of
-candidate ideas with their scores. Pick the ones most likely to attract viewers
-for a channel about human psychology, evolution, history, and "why do humans do this?"
+        if matched_index is not None:
+            representatives[matched_index]["alternate_phrasings"].append(idea["query"])
+        else:
+            rep = dict(idea)
+            rep["alternate_phrasings"] = []
+            representatives.append(rep)
+            signatures.append(sig)
 
-Return ONLY a JSON array of the numbers you want to keep. Example: [1, 3, 7]
-
-{idea_list}"""
-
-    try:
-        result = subprocess.run(
-            ["curl", "-s", LOCAL_LLM_URL,
-             "-d", json.dumps({
-                 "model": LOCAL_LLM_MODEL,
-                 "prompt": prompt,
-                 "stream": False
-             })],
-            capture_output=True, text=True, timeout=60
-        )
-        response = json.loads(result.stdout)
-        answer = response.get("response", "")
-
-        # Extract JSON array from response
-        import re
-        match = re.search(r"\[[\d\s,]+\]", answer)
-        if match:
-            keep_indices = json.loads(match.group())
-            return [borderline_ideas[i - 1] for i in keep_indices
-                    if 1 <= i <= len(borderline_ideas)]
-    except Exception as e:
-        print(f"  Warning: local LLM filter failed: {e}")
-        print("  Falling back to score-based cutoff.")
-
-    return borderline_ideas  # On failure, keep all borderline ideas
+    return representatives
 
 
-def run_filter() -> list[dict]:
+def run_filter() -> dict:
     """
     Filter enriched ideas to survivors.
-    Writes data/survivors.json.
+    Writes data/survivors.json and data/filter_stats.json.
     """
+    run_id = current_run_id(DATA_DIR)
+    print(f"Run ID: {run_id}")
+
     with open(DATA_DIR / "enriched.json") as f:
-        enriched = json.load(f)
+        enriched = json.load(f)  # already sorted deterministically by Stage 3
 
-    print(f"Stage 4: Filtering {len(enriched)} ideas...")
+    print(f"Stage 4: Filtering {len(enriched)} candidates...")
 
-    # Step 1: hard rules
-    passed = [idea for idea in enriched if passes_hard_rules(idea)]
-    rejected = len(enriched) - len(passed)
-    print(f"  Hard rules: {len(passed)} passed, {rejected} rejected")
+    eligible = [idea for idea in enriched if passes_eligibility(idea)]
+    print(f"  Eligibility: {len(eligible)} passed, {len(enriched) - len(eligible)} rejected")
 
-    # Step 2: if still too many, split into safe keepers and borderline
-    if len(passed) <= SURVIVOR_TARGET:
-        survivors = passed
-    elif USE_LOCAL_LLM_FILTER:
-        # Top half are safe keepers; bottom half go to LLM for tiebreaking
-        safe = passed[:SURVIVOR_TARGET // 2]
-        borderline = passed[SURVIVOR_TARGET // 2:]
-        llm_picks = local_llm_filter(borderline)
-        survivors = safe + llm_picks[:SURVIVOR_TARGET - len(safe)]
-        print(f"  Local LLM kept {len(llm_picks)} from {len(borderline)} borderline ideas")
+    deduped = dedupe_near_duplicates(eligible)
+    merged = len(eligible) - len(deduped)
+    print(f"  Near-duplicate clustering: {len(deduped)} distinct opportunities "
+          f"({merged} phrasing(s) merged into an existing opportunity)")
+
+    qualifying = [idea for idea in deduped if passes_quality(idea)]
+    print(f"  Quality threshold (score >= {MIN_SCORE_THRESHOLD}): {len(qualifying)} passed")
+
+    is_fallback = False
+    if qualifying:
+        survivors = qualifying[:MAX_REPORT_IDEAS]
+        if len(qualifying) > MAX_REPORT_IDEAS:
+            print(f"  {len(qualifying)} qualified; report capped at "
+                  f"MAX_REPORT_IDEAS={MAX_REPORT_IDEAS} -> showing top {len(survivors)}")
+        else:
+            print(f"  {len(qualifying)} qualified; showing all of them "
+                  f"(MAX_REPORT_IDEAS={MAX_REPORT_IDEAS} is a cap, not a target — "
+                  f"unused slots were not filled with lower-quality ideas)")
     else:
-        # Just take top N by score
-        survivors = passed[:SURVIVOR_TARGET]
+        is_fallback = True
+        # Fallback pool draws from ALL enriched ideas, not just eligible
+        # ones — "best available candidates" per the spec, not "best
+        # eligible candidates". Deduped independently of the main pipeline.
+        fallback_pool = dedupe_near_duplicates(enriched)
+        survivors = fallback_pool[:FALLBACK_CANDIDATE_COUNT]
+        for idea in survivors:
+            idea["is_fallback"] = True
+        print(f"  WARNING: zero ideas passed the quality threshold. "
+              f"Falling back to the best {len(survivors)} available candidate(s), "
+              f"labelled BELOW NORMAL THRESHOLD / FALLBACK.")
 
-    print(f"Stage 4 complete: {len(survivors)} survivors.")
+    stats = {
+        "run_id": run_id,
+        "candidates_examined": len(enriched),
+        "initial_eligibility_count": len(eligible),
+        "distinct_after_clustering": len(deduped),
+        "passing_final_threshold": len(qualifying),
+        "reported": len(survivors),
+        "is_fallback": is_fallback,
+        "max_report_ideas": MAX_REPORT_IDEAS,
+    }
+
+    print(f"Stage 4 complete: {len(survivors)} survivors "
+          f"({'FALLBACK' if is_fallback else 'quality-qualified'}).")
 
     out_path = DATA_DIR / "survivors.json"
     with open(out_path, "w") as f:
         json.dump(survivors, f, indent=2)
-
     print(f"Wrote {out_path} ({len(survivors)} survivors)")
+
+    stats_path = DATA_DIR / "filter_stats.json"
+    with open(stats_path, "w") as f:
+        json.dump(stats, f, indent=2)
+    print(f"Wrote {stats_path}: {stats}")
 
     if survivors:
         print("Survivors (score desc):")
         for idea in survivors:
-            print(f"  - {idea['idea_score']:.3f}  \"{idea['query']}\"")
+            alt = idea.get("alternate_phrasings") or []
+            alt_note = f"  [+{len(alt)} alt phrasing(s)]" if alt else ""
+            fb_note = "  [FALLBACK]" if idea.get("is_fallback") else ""
+            print(f"  - {idea['idea_score']:.3f}  \"{idea['query']}\"{alt_note}{fb_note}")
     else:
-        print("  WARNING: zero survivors — report will be empty. "
-              "Check MIN_SCORE_THRESHOLD / MIN_VIEWS_PER_DAY / MAX_SATURATION_COUNT in config.py "
-              "against the actual score/signal distribution in data/enriched.json.")
+        print("  WARNING: zero survivors at all — report will be empty. "
+              "This means enriched.json itself was empty or every idea failed "
+              "even the fallback dedup pool.")
 
-    rejected_ideas = [idea for idea in enriched if not passes_hard_rules(idea)]
-    if rejected_ideas:
-        print(f"\nSample of rejected ideas ({len(rejected_ideas)} total):")
-        for idea in rejected_ideas[:3]:
-            print(f"  - {idea['idea_score']:.3f}  \"{idea['query']}\"  "
-                  f"(vpd={idea['signals'].get('raw_best_vpd', '?')}, "
-                  f"count={idea['signals'].get('raw_video_count', '?')})")
-
-    return survivors
+    return {"survivors": survivors, "stats": stats}
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from config import (
     CAPTION_TIMEOUT_SECONDS,
     CAPTION_LANGUAGES,
 )
+from common import select_competitor_videos, current_run_id
 
 
 def fetch_captions(video_id: str, url: str) -> str | None:
@@ -106,6 +107,8 @@ def run_captions() -> dict[str, list[str]]:
     Fetch captions for top competitors of each surviving idea.
     Returns dict mapping query → list of caption texts.
     """
+    print(f"Run ID: {current_run_id(DATA_DIR)}")
+
     with open(DATA_DIR / "survivors.json") as f:
         survivors = json.load(f)
 
@@ -120,12 +123,9 @@ def run_captions() -> dict[str, list[str]]:
 
     for idea in survivors:
         query = idea["query"]
-        # Sort videos by views descending, take top N
-        videos = sorted(
-            idea.get("videos", []),
-            key=lambda v: v.get("view_count", 0) or 0,
-            reverse=True,
-        )[:MAX_CAPTION_VIDEOS_PER_IDEA]
+        # Shared selection (common.select_competitor_videos) — Stage 6 must
+        # pick the exact same videos, or downloaded captions go unused.
+        videos = select_competitor_videos(idea, MAX_CAPTION_VIDEOS_PER_IDEA)
 
         captions_for_idea = []
         for video in videos:
