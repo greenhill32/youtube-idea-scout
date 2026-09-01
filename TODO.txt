@@ -107,6 +107,19 @@ LATER
     - suggested angle
     - evidence
 
+[ ] Consider channel-level style analysis
+    Currently Stage 5/6 only compare per-video: top N competitor videos'
+    captions for one query. A channel-level signal would instead look at
+    a competing channel's pattern across many videos (recurring formats,
+    titling conventions, what topics they return to) rather than just a
+    single video's transcript.
+    From 2026-09-01 comparison against tubegen.ai (a commercial faceless-
+    channel video-generation SaaS, not a real competitor to this tool's
+    purpose) -- its "replicate a creator's style" feature does channel-
+    level pattern matching, which is sharper than this project's current
+    per-video-only competitor comparison. Worth a future Stage 3/6 signal,
+    not urgent.
+
 
 NOT NOW
 -------

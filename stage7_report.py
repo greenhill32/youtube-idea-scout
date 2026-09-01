@@ -25,7 +25,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from config import (
-    DATA_DIR, ANALYSES_DIR, REPORT_FILE, MAX_REPORT_IDEAS,
+    DATA_DIR, ANALYSES_DIR, REPORT_FILE, REPORTS_ARCHIVE_DIR, MAX_REPORT_IDEAS,
     FALLBACK_CANDIDATE_COUNT, RUN_HISTORY_FILE,
 )
 from common import current_run_id
@@ -435,6 +435,12 @@ def generate_report() -> str:
 </html>"""
 
     REPORT_FILE.write_text(html_doc, encoding="utf-8")
+
+    # report.html is overwritten every run; archive a run_id-keyed copy so
+    # past reports survive the next run instead of being silently lost.
+    REPORTS_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    (REPORTS_ARCHIVE_DIR / f"report_{run_id}.html").write_text(html_doc, encoding="utf-8")
+
     print(f"Stage 7 complete: report written to {REPORT_FILE}")
     print(f"Wrote {REPORT_FILE} ({len(html_doc)} bytes, {len(display_ideas)} idea cards, "
           f"{len(rejected_for_display)} rejected listed, fallback={is_fallback})")

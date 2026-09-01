@@ -13,6 +13,8 @@ DATA_DIR = PROJECT_ROOT / "data"
 CAPTIONS_DIR = DATA_DIR / "captions"
 ANALYSES_DIR = DATA_DIR / "analyses"
 REPORT_FILE = DATA_DIR / "report.html"
+REPORTS_ARCHIVE_DIR = DATA_DIR / "reports"  # one copy per run, keyed by run_id — report.html
+                                              # itself is overwritten each run, this isn't
 TEMPLATE_DIR = PROJECT_ROOT / "templates"
 PROGRESS_FILE = PROJECT_ROOT / "progress.txt"        # engineering memory, not a run log
 RUN_HISTORY_FILE = PROJECT_ROOT / "run_history.jsonl"  # one line per completed run

@@ -339,3 +339,153 @@ out to a tool installed under a user-local bin directory (~/.local/bin,
 scripts by simulating cron's actual environment (`env -i ... bash -c`),
 not by running them from an interactive shell.
 ============================================================
+
+
+============================================================
+2026-09-01 | run_id: 20260901-1531 (first full production run, 894 queries)
+STATUS: OPEN
+AREA: Stage 4 filtering — MIN_SCORE_THRESHOLD is not a functioning quality gate
+SEVERITY: MEDIUM
+
+PROBLEM:
+Lee's manual review of this run's report (delivered via Waystation,
+item 447bac5c3a) flagged that filter_stats.json shows 492 of 498
+clustered opportunities (98.8%) passing MIN_SCORE_THRESHOLD -- the
+threshold rejected only 6 candidates. Verified independently against
+data/enriched.json (683 pre-clustering candidates): scores are tightly
+bunched (min 0.327, median 0.545, max 0.811) with only 23/683 (3.4%)
+below the 0.4 threshold. The threshold isn't discriminating between
+"plausible" and "implausible" ideas at this population's actual score
+distribution -- essentially all the real selection pressure in this run
+came from the MAX_REPORT_IDEAS=20 top-N cap, not from
+MIN_SCORE_THRESHOLD.
+
+EVIDENCE:
+data/filter_stats.json (this run): candidates_examined=683,
+distinct_after_clustering=498, passing_final_threshold=492.
+data/enriched.json score histogram (0.1-wide buckets): 0.3->3, 0.4->116,
+0.5->228, 0.6->207, 0.7->121, 0.8->8.
+
+LESSON (per Lee, agreed):
+This is a single-run observation, not yet a confirmed pattern -- do NOT
+retune MIN_SCORE_THRESHOLD or the scoring weights off one sample. Per
+Lee's explicit instruction: run Scout again unchanged, compare whether
+this bunching recurs, before touching scoring. If it's consistent
+across several runs, the threshold either needs raising substantially
+or reframing as "this measures nothing useful at the current formula's
+output range" and replaced with a different mechanism (e.g. relative
+percentile cutoff rather than an absolute score threshold).
+
+NEXT ACTION: Watch for the same bunching pattern across the next 2-3
+unchanged production runs (see TODO.txt RUN/CALIBRATION section) before
+proposing a fix.
+============================================================
+
+
+============================================================
+2026-09-01 | run_id: 20260901-1531
+STATUS: OPEN
+AREA: Report display — "Competition" score has inverted semantics, misleads a human reader
+SEVERITY: MEDIUM-HIGH
+
+PROBLEM:
+Lee's review flagged several report cards showing "Competition: 0.0"
+alongside competitor videos with very high view counts/velocity, and
+correctly identified this as "dangerous" -- a human reading "Competition:
+0.0" naturally reads it as "no competition" (good), but that is
+backwards. Verified in stage3_enrich.py:104-105:
+
+    avg_field_vpd = sum(views_per_day for all returned videos) / video_count
+    competition = round(max(1 - min(avg_field_vpd / COMPETITION_FIELD_VPD_CAP, 1.0), 0), 3)
+
+This is intentionally inverted FOR SCORING PURPOSES -- it's added
+positively to idea_score (line 123: `+ competition * 0.20`), so a "good"
+(open) opportunity needs a HIGH competition value. A value of 0.0 means
+avg_field_vpd already meets or exceeds COMPETITION_FIELD_VPD_CAP (2000)
+-- i.e. maximum field saturation, the WORST case, not the best.
+Confirmed against this run's own survivor data: "why does the human
+body store fat" shows competition=0.0 with raw_best_vpd=361,618/day (one
+competitor is doing 361K views/day); "what happens if humans eat another
+human" shows competition=0.0 with raw_best_vpd=24,058/day. The formula
+itself is correct and intentional for scoring; the defect is that
+stage7_report.py's secondary-signals row prints this raw internal value
+directly as "Competition: {value}" with no framing, so a human reading
+the report has no way to know 0.0 means saturated rather than open.
+
+EVIDENCE:
+data/survivors.json, "why does the human body store fat":
+signals.competition=0.0, signals.raw_best_vpd=361618.5.
+data/survivors.json, "what happens if humans eat another human":
+signals.competition=0.0, signals.raw_best_vpd=24058.0.
+Lee's review (Waystation 447bac5c3a) independently caught 4 instances of
+this same confusion by eye (cannibalism, DMT, body fat, pubic hair).
+
+LESSON: An internal signal that's deliberately inverted relative to its
+name (here: "competition" actually means "field openness," scored so
+low=saturated/bad) must never be surfaced to a human reader under its
+internal name and raw value without translation. This is the same class
+of problem as the 2026-08-21 composition-score-ceiling issue above
+(constant/misleading signal hiding inside a plausible-looking number) --
+but here it's a display bug, not a scoring bug: the underlying formula
+and its contribution to idea_score are working as designed, only the
+report's presentation of the raw value is broken.
+
+NEXT ACTION: Not fixed yet, per Lee's "no major changes on one sample"
+instruction. When addressed, this is a Stage 7 presentation fix only
+(e.g. show a LOW/MEDIUM/HIGH saturation label derived from avg_field_vpd,
+or invert the displayed label to "Openness"), not a Stage 3 scoring
+change -- the underlying idea_score math should not need to move.
+============================================================
+
+
+============================================================
+2026-09-01 | run_id: 20260901-1531
+STATUS: OPEN
+AREA: Stage 6 gap analysis — unsupported/hallucinated numeric claim in reasoning text
+SEVERITY: HIGH
+
+PROBLEM:
+Lee's review flagged the "why does the human body grow pubic hair" card
+(data/analyses/0008.json): the `reasoning` field states "a 70K+ view/day
+query" as grounding for the MAKE verdict. No 70K figure exists anywhere
+in this idea's actual data: the three competitors shown to Stage 6 have
+views/day of 11, 3,087 (approx) and up to raw_best_vpd=5,673.3 -- nor
+does the Stage 6 prompt (stage6_analysis.py build_analysis_prompt(),
+which only ever includes each competitor's Views/Views-per-day/title/
+transcript) contain a 70K figure anywhere for Claude to have quoted.
+The only "70,000" in the whole exchange is in the *same response's*
+`what_competitors_miss` field -- "humans losing most body hair
+70,000-120,000 years ago" -- an evolutionary-timescale fact, unrelated
+to audience demand. The model appears to have reused/repurposed that
+number from its own generated evolutionary narrative and restated it,
+in a different field, as if it were a demand statistic. This is a
+fabricated claim presented as fact, in the exact prose ("WHY MAKE
+THIS?") that v0.21.1 made the most prominent part of MAKE cards.
+
+EVIDENCE:
+data/analyses/0008.json: reasoning="...a genuine gap: a 70K+ view/day
+query with no video exploring..."; what_competitors_miss mentions
+"70,000-120,000 years ago" in the same JSON object.
+stage6_analysis.py build_analysis_prompt(): confirmed no view/demand
+figure anywhere close to 70K is ever included in what's sent to Claude
+for this idea.
+
+LESSON: The Stage 6 prompt currently asks for free-text reasoning with
+no constraint against inventing numbers not present in its own input.
+A single hallucinated statistic in `reasoning` is easy to miss because
+the surrounding prose reads fluently and the verdict (MAKE, high
+confidence, gap/fit both adequate) is plausible on its own merits --
+this is exactly the "confident AI sentence that can poison an otherwise
+data-driven system" failure mode Lee named. Fail-closed handling
+(_fail_closed()) only catches structural failures (bad JSON, missing
+verdict) -- it has no mechanism for catching a well-formed but
+factually ungrounded claim.
+
+NEXT ACTION: Not fixed yet, per Lee's "no major changes on one sample"
+instruction. When addressed, consider: (1) an explicit prompt
+instruction to only cite numbers that appear in the competitor data
+provided, never invent one; (2) a lightweight post-hoc check that flags
+any numeral in `reasoning`/`what_competitors_miss` not traceable to the
+prompt's own input, for human review rather than auto-correction. Watch
+whether this recurs on future unchanged runs before building either.
+============================================================
