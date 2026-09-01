@@ -102,7 +102,7 @@ def build_summary_block(filter_stats: dict, stage1_stats: dict, stage2_stats: di
         failures = stage6_stats.get("editorial_failures", 0)
         fail_colour = "#b91c1c" if failures else "inherit"
         lines.append(f'<span>Editorial evaluation failures</span><span style="text-align:right;color:{fail_colour}">{failures}</span>')
-    lines.append(f'<span>Reported</span><span style="text-align:right">{reported}</span>')
+    lines.append(f'<span>Recommended</span><span style="text-align:right">{reported}</span>')
 
     rows = f"""
     <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:20px;font-size:0.9em;color:#374151">
@@ -136,9 +136,36 @@ def build_fallback_banner(reported: int) -> str:
     </div>"""
 
 
+def truncate(text: str, max_len: int = 280) -> str:
+    """Keep a summary genuinely concise even if the model runs long."""
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rsplit(" ", 1)[0] + "…"
+
+
+def assessment_tag(label: str, value: str) -> str:
+    """Small pill for a Stage 6 editorial assessment (adequate/inadequate)."""
+    is_adequate = str(value).lower() == "adequate"
+    colour = "#16a34a" if is_adequate else "#dc2626"
+    bg = "#dcfce7" if is_adequate else "#fee2e2"
+    return (f'<span style="font-size:0.75em;font-weight:600;padding:2px 8px;border-radius:3px;'
+            f'background:{bg};color:{colour}">{esc(label)}: {esc(value)}</span>')
+
+
 def build_idea_card(i: int, idea: dict, analysis: dict, is_fallback_display: bool) -> str:
     """Full recommendation card — used for MAKE ideas, and for the
-    best-available candidates shown in a zero-MAKE fallback run."""
+    best-available candidates shown in a zero-MAKE fallback run.
+
+    v0.21.1: MAKE ideas lead with a prominent MAKE badge and a "WHY MAKE
+    THIS?" synthesis (Stage 6's own reasoning, not a rewrite), with the
+    Gap/Fit editorial assessments surfaced as tags right below it. The
+    deterministic numeric score/signals move down into a smaller,
+    secondary row — still visible, no longer the first thing you read.
+    Fallback (REJECT-but-shown) cards keep the plainer layout: calling
+    something "why make this" when the verdict was REJECT would misstate
+    what the card is.
+    """
     query = idea["query"]
     score = idea["idea_score"]
     signals = idea.get("signals", {})
@@ -163,24 +190,51 @@ def build_idea_card(i: int, idea: dict, analysis: dict, is_fallback_display: boo
             <ul style="margin:4px 0 0 0;padding-left:20px">{items}</ul>
         </div>"""
 
+    # Secondary row: deterministic numeric score + Stage 3 signals. Still
+    # here, still readable — just no longer the visual headline.
+    secondary_signals_html = f"""
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;font-size:0.8em;color:#9ca3af;margin:10px 0 12px 0;padding-top:10px;border-top:1px solid #f3f4f6">
+        <span>Score {score:.2f}</span>
+        {score_bar(score)}
+        <span>Demand: {signals.get('demand', '?')}</span>
+        <span>Competition: {signals.get('competition', '?')}</span>
+        <span>Breakout: {'Yes' if signals.get('breakout', 0) > 0 else 'No'}</span>
+        <span>Channel fit: {signals.get('channel_fit', '?')}</span>
+    </div>"""
+
+    make_header_html = ""
     analysis_html = ""
+
     if analysis and not analysis.get("fatal_issue"):
         conf = analysis.get("confidence", "unknown")
+        gap = analysis.get("gap_assessment")
+        fit = analysis.get("fit_assessment")
+
+        if not is_fallback_display:
+            # WHY MAKE THIS? — Stage 6's own reasoning, verbatim (truncated
+            # only for safety), not a separate rewrite. Gap/Fit tags sit
+            # directly beneath it since they're what the verdict rests on.
+            tags = "".join([
+                assessment_tag("Gap", gap) if gap else "",
+                assessment_tag("Fit", fit) if fit else "",
+                f'<span style="font-size:0.75em;padding:2px 8px;border-radius:3px;'
+                f'background:{confidence_colour(conf)};color:white">{esc(conf)} confidence</span>',
+            ])
+            make_header_html = f"""
+            <div style="margin:10px 0 4px 0">
+                <div style="font-weight:700;font-size:0.8em;letter-spacing:0.5px;color:#166534;margin-bottom:4px">WHY MAKE THIS?</div>
+                <p style="margin:0 0 8px 0;color:#1f2937">{esc(truncate(analysis.get('reasoning', ''), 320))}</p>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">{tags}</div>
+            </div>"""
+
         analysis_html = f"""
         <div style="margin-top:12px;padding:12px;background:#f0fdf4;border-radius:6px;border-left:3px solid {confidence_colour(conf)}">
-            <div style="font-weight:600;margin-bottom:6px">
-                Gap Analysis
-                <span style="font-size:0.8em;padding:2px 6px;border-radius:3px;
-                    background:{confidence_colour(conf)};color:white;margin-left:8px">
-                    {esc(conf)} confidence
-                </span>
-            </div>
+            <div style="font-weight:600;margin-bottom:6px">Gap Analysis detail</div>
             <p style="margin:4px 0"><strong>Competitors cover:</strong> {esc(analysis.get('what_competitors_cover', 'N/A'))}</p>
             <p style="margin:4px 0"><strong>Competitors miss:</strong> {esc(analysis.get('what_competitors_miss', 'N/A'))}</p>
             <p style="margin:4px 0;padding:8px;background:#dcfce7;border-radius:4px">
                 <strong>Suggested angle:</strong> {esc(analysis.get('suggested_angle', 'N/A'))}
             </p>
-            <p style="margin:4px 0;font-size:0.9em;color:#666"><em>{esc(analysis.get('reasoning', ''))}</em></p>
         </div>"""
     elif analysis and analysis.get("fatal_issue"):
         analysis_html = (f'<div style="margin-top:12px;padding:8px;background:#fef2f2;border-radius:4px;'
@@ -188,22 +242,21 @@ def build_idea_card(i: int, idea: dict, analysis: dict, is_fallback_display: boo
     else:
         analysis_html = '<div style="margin-top:12px;padding:8px;background:#fef3c7;border-radius:4px;font-size:0.9em">Gap analysis not available for this idea.</div>'
 
-    fallback_badge = ('<span style="font-size:0.75em;padding:2px 8px;border-radius:3px;background:#ef4444;'
-                       'color:white;margin-left:8px;vertical-align:middle">FALLBACK</span>') if is_fallback_display else ""
-    card_border = "#ef4444" if is_fallback_display else "#e5e7eb"
+    if is_fallback_display:
+        verdict_badge = ('<span style="font-size:0.75em;font-weight:700;padding:3px 10px;border-radius:4px;'
+                          'background:#ef4444;color:white;letter-spacing:0.5px">FALLBACK — BELOW THRESHOLD</span>')
+        card_border = "#ef4444"
+    else:
+        verdict_badge = ('<span style="font-size:0.75em;font-weight:700;padding:3px 10px;border-radius:4px;'
+                          'background:#16a34a;color:white;letter-spacing:0.5px">MAKE</span>')
+        card_border = "#e5e7eb"
 
     return f"""
     <div style="border:1px solid {card_border};border-radius:8px;padding:20px;margin-bottom:16px;background:white">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <h3 style="margin:0;font-size:1.1em">#{i+1} — "{esc(query)}"{fallback_badge}</h3>
-            <div>{score_bar(score)}</div>
-        </div>
-        <div style="display:flex;gap:16px;font-size:0.85em;color:#666;margin-bottom:12px">
-            <span>Demand: {signals.get('demand', '?')}</span>
-            <span>Competition: {signals.get('competition', '?')}</span>
-            <span>Breakout: {'Yes' if signals.get('breakout', 0) > 0 else 'No'}</span>
-            <span>Channel fit: {signals.get('channel_fit', '?')}</span>
-        </div>
+        <div style="margin-bottom:6px">{verdict_badge}</div>
+        <h3 style="margin:0;font-size:1.1em">#{i+1} — "{esc(query)}"</h3>
+        {make_header_html}
+        {secondary_signals_html}
         <table style="width:100%;border-collapse:collapse;font-size:0.9em;margin-bottom:8px">
             <thead>
                 <tr style="border-bottom:1px solid #e5e7eb;text-align:left">
@@ -338,6 +391,16 @@ def generate_report() -> str:
                                          stage6_stats, len(display_ideas), run_id)
     fallback_banner = build_fallback_banner(len(display_ideas)) if is_fallback else ""
 
+    # "X ideas reported" reads like a raw analysis dump; this report is a
+    # decision surface. Fallback candidates never earned "recommended" —
+    # say what they actually are instead of overselling them.
+    if is_fallback:
+        n = len(display_ideas)
+        header_line = f"{n} fallback candidate{'s' if n != 1 else ''} shown (none met the normal quality threshold)"
+    else:
+        n = len(display_ideas)
+        header_line = f"{n} recommended opportunit{'y' if n == 1 else 'ies'}"
+
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -359,7 +422,7 @@ def generate_report() -> str:
 </head>
 <body>
     <h1 style="margin-bottom:4px">YouTube Idea Scout Report</h1>
-    <p style="color:#6b7280;margin-top:0">Generated {now} — run {esc(run_id)} — {len(display_ideas)} ideas reported</p>
+    <p style="color:#6b7280;margin-top:0">Generated {now} — run {esc(run_id)} — {header_line}</p>
     {fallback_banner}
     {summary_block}
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">

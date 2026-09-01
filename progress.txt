@@ -23,7 +23,71 @@ When a new fix contradicts an earlier decision, record why the earlier
 approach was superseded — don't just delete it. Do not delete historical
 resolved entries; append a RESOLUTION entry that references the original.
 
+Human / Scout disagreement convention:
+When a human reviewing the report disagrees with a Scout verdict (would
+have MAKEd a REJECT, or vice versa), log it here with STATUS: WATCH —
+not STATUS: OPEN. A single disagreement is anecdotal and proves nothing
+about the editorial gate; do NOT change Stage 6's prompt, scoring
+weights, or veto rules in response to one WATCH entry. Only promote a
+WATCH to an OPEN engineering issue once a repeated pattern emerges
+across multiple runs/entries pointing at the same root cause. Format:
+
+  STATUS: WATCH
+  AREA: Human / Scout disagreement
+  SCOUT VERDICT: ...
+  HUMAN VERDICT: ...
+  QUERY: ...
+  REASON: ...
+  NEXT ACTION: Look for repeated examples before changing editorial rules.
+
 ========================================
+
+
+============================================================
+2026-08-22 | run_id: n/a (infrastructure, not a pipeline stage)
+STATUS: RESOLVED
+AREA: Scheduled-run email alerting mechanism
+SEVERITY: LOW
+
+PROBLEM:
+scripts/run_scheduled.sh (the Friday 19:30 cron job) was built to send
+its success/failure alert via `claude -p "..." ` asking the local claude
+CLI to use its Gmail MCP connector. `claude mcp list` showed Gmail as
+"Needs authentication" (unlike Drive/Calendar/Vercel, already connected)
+-- and MCP OAuth requires a browser-interactive step that a non-
+interactive cron-launched `claude -p` session cannot complete on its own
+anyway, so this path was never going to work unattended even after a
+one-time manual fix.
+
+FIX:
+Found an existing, already-working mechanism instead of trying to fix
+the blocked one: Lee's Mac mini runs `~/.discovery-engine`, a daily
+brief/digest project with its own notify.py that sends mail via plain
+Gmail SMTP (smtp.gmail.com:465) using an app password stored in that
+machine's ~/.env (GMAIL_ADDRESS / GMAIL_APP_PASSWORD) -- no OAuth, no
+Claude MCP involved, and already proven reliable (it's been sending
+Lee's daily brief for weeks per the .discovery-engine file timestamps).
+Rewrote run_scheduled.sh's alerting to SSH to lees-mac-mini (passwordless
+SSH already set up per this NUC's CLAUDE.md) and invoke that notify.py
+remotely, rather than duplicating a second Gmail app password onto this
+NUC or persisting with the unauthenticated MCP path.
+
+VERIFICATION:
+Sent a live test email via `ssh lees-mac-mini "python3
+~/.discovery-engine/notify.py '...'"` -- delivered successfully. Then
+re-verified using the exact send_alert() bash function as it appears
+inside run_scheduled.sh, confirming the wrapper script's actual code
+path works, not just the underlying mechanism in isolation.
+
+LESSON:
+Before building new integration plumbing (here: getting a fresh MCP
+connector authenticated for a non-interactive context that fundamentally
+can't complete OAuth on its own), check whether a working equivalent
+already exists elsewhere in the user's environment. It did, on a
+different machine, for a different project -- and reusing it via SSH
+avoided both the OAuth dead-end and the security smell of duplicating
+credentials onto a second machine.
+============================================================
 
 
 ============================================================

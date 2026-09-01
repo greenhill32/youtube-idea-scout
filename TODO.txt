@@ -1,0 +1,181 @@
+YOUTUBE IDEA SCOUT — TODO
+=========================
+
+Purpose
+-------
+This file is the live work queue for YouTube Idea Scout.
+
+Use this file for:
+- planned changes
+- investigations
+- small improvements
+- work not yet completed
+
+Do NOT use this file as engineering history.
+Bugs, regressions, lessons, classification failures, and resolved issues belong in progress.txt.
+
+At the start of maintenance/build work:
+1. Read TODO.txt to understand pending work.
+2. Read progress.txt for relevant historical failures and lessons.
+3. Do not mark a TODO complete until it has been implemented and verified.
+4. When complete, remove it from NEXT or move it briefly to DONE.
+5. If the work exposes a meaningful bug, regression, disagreement, or lesson, record that separately in progress.txt.
+
+
+NEXT
+----
+
+(empty)
+
+
+OPERATIONS
+----------
+
+[ ] Watch the first Thursday TODO-fixes cron run closely before trusting it
+    - installed 2026-08-22: scripts/run_todo_fixes.sh, Thursday 19:30
+      Europe/London, runs `claude -p ... --dangerously-skip-permissions`
+      unattended against this repo to implement whatever is under
+      TODO.txt's NEXT section at fire time
+    - correctly no-ops (no session spun up, no email sent) if NEXT has
+      no unchecked "[ ]" items -- verified against both the real
+      (currently empty) TODO.txt and a synthetic non-empty case
+    - deliberately does NOT commit or push; changes are left in the
+      working tree for review -- check `git status`/`git diff` after
+      the first real (non-empty-NEXT) run before assuming this is safe
+      to leave unattended long-term
+    - runs with full tool access for the session's duration (required
+      for unattended operation); the prompt constrains it to NEXT-item
+      work only, but that's a prompt-level constraint, not a hard one
+
+[ ] Dead-man's-switch monitoring for the Friday cron job
+    - scripts/run_scheduled.sh alerts on a run that STARTS and then
+      succeeds/fails, but cannot detect the job never firing at all
+      (machine off, cron disabled) -- would need separate monitoring
+      if that matters
+
+
+RUN / CALIBRATION
+-----------------
+
+[ ] Run Scout unchanged for several real production runs
+    - do not tune MAKE rate toward a target percentage
+    - inspect individual MAKE / REJECT decisions
+    - record meaningful disagreements in progress.txt
+    - use run_history.jsonl only as calibration breadcrumbs
+
+[ ] Watch for over-grand gap construction
+    In particular, inspect recommendations where Claude turns a modest
+    factual gap into a much larger psychological/evolutionary story.
+    Example pattern: "why are humans warm"-type recommendations.
+
+[ ] Watch rejection quality
+    Confirm Scout continues to reject:
+    - strong-demand but off-territory topics
+    - relevant topics with no meaningful remaining content gap
+    - accidental franchise/pop-culture keyword collisions
+
+[ ] Check REJECT reasoning specificity, not just REJECT rate
+    - a REJECT with a vague reasoning_summary is a silent quality
+      regression even if the verdict itself is correct
+    - spot-check a few REJECTs per run for whether fatal_issue/
+      reasoning would actually help a human learn something, not
+      just "insufficient gap"
+
+[ ] Watch for gap_strength / fit_assessment score-vs-verdict drift
+    - confirm strong-metric-but-REJECT candidates (like "why are humans
+      monogamous") stay rare and evidence-backed, not a pattern of
+      punishing well-covered-but-still-good topics
+
+
+LATER
+-----
+
+[ ] Consider lightweight human feedback
+    - WOULD MAKE
+    - WOULD NOT MAKE
+    Store only for future calibration.
+    Do not add automatic learning yet.
+
+[ ] Consider "Promote to Factory"
+    Only after several real runs show that MAKE recommendations are trustworthy.
+    Potential payload:
+    - source query
+    - working title
+    - hook
+    - competitor links
+    - transcript-derived gap
+    - suggested angle
+    - evidence
+
+
+NOT NOW
+-------
+
+- Google integration
+- Reddit integration
+- dashboard
+- database
+- vector database
+- automatic prompt optimisation
+- autonomous publishing
+- additional scoring systems
+- extra LLMs
+- Stage 1 redesign
+- major Stage 2 optimisation
+- cross-run automatic learning
+
+
+DONE
+----
+
+[v0.2] Fixed Stage 5/6 caption handoff
+[v0.2] Removed scoring ceiling and non-deterministic ties
+[v0.2] Fixed "why" + "humans" channel-fit domination
+[v0.2] Added pre-Stage-2 relevance gate
+[v0.2] Added near-duplicate clustering
+[v0.2] Made report size quality-driven
+[v0.21] Added Stage 6 MAKE / REJECT editorial decision layer
+[v0.21] Added semantic GAP / FIT veto behaviour
+[v0.21] Added run_id, run_history.jsonl, and progress.txt discipline
+[v0.21] Verified franchise leakage is rejected by editorial judgement
+[v0.21] Decided malformed Stage 6 output handling: fail-closed to
+        verdict=REJECT + fatal_issue on any parse/schema failure (bad
+        JSON, missing verdict, invalid verdict value, non-zero CLI exit,
+        timeout) — never silently dropped, never defaulted to MAKE, no
+        auto-retry. Implemented in stage6_analysis.py's _fail_closed();
+        verified with 6 mocked-subprocess unit tests covering every
+        failure path plus the valid-verdict passthrough case.
+[v0.21.1] Improved MAKE card presentation: prominent MAKE badge at top
+        of card, "WHY MAKE THIS?" showing Stage 6's own reasoning,
+        Gap/Fit editorial assessment tags surfaced beneath it. Numeric
+        score/signals moved to a smaller secondary row. Omitted Hook/
+        Makeability — no such Stage 6 assessment exists (only
+        gap_assessment/fit_assessment do); fabricating them was rejected
+        as an option. Stage 1-6 judgement/scoring logic untouched
+        (git diff confirms only stage7_report.py changed).
+[v0.21.1] Changed report wording: "X ideas reported" -> "X recommended
+        opportunities" (normal case) / "X fallback candidates shown
+        (none met the normal quality threshold)" (fallback case, so
+        fallback candidates are never mis-labelled "recommended").
+[v0.21.1] Documented the human/Scout disagreement convention in
+        progress.txt (STATUS: WATCH tier, promote to OPEN only on a
+        repeated pattern, never edit Stage 6 from a single disagreement).
+[v0.21.1] Verified alternate_phrasings survives from Stage 4 dedup
+        through to the exact Stage 6-verdicted card: spot-checked all 4
+        alt-phrasing survivors in the live 20-idea dataset — in every
+        case the deduped representative's query matched the analysed
+        query exactly (index-aligned by construction: survivors.json
+        index == analyses/NNNN.json index), and "Also matched" rendered
+        on all 4 cards in report.html.
+[v0.21.1] Added scripts/run_scheduled.sh + weekly cron (Friday 19:30
+        Europe/London) to run the full pipeline unattended and email a
+        success/failure alert. Initially built on `claude -p` + Gmail
+        MCP, but that connector was never authenticated and can't be
+        OAuth'd non-interactively from cron. Switched to SSH'ing
+        lees-mac-mini and invoking its existing ~/.discovery-engine/
+        notify.py (plain Gmail SMTP, app password, already working for
+        Lee's daily brief) -- reuses working credentials instead of
+        adding a new unauthenticated dependency. Verified end-to-end:
+        test email delivered to greenhill3222@gmail.com via both a
+        direct notify.py call and the exact send_alert() function as
+        used inside the wrapper script.
