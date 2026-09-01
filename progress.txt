@@ -229,3 +229,49 @@ competitor content, not a wider keyword list upstream. Keep the cheap
 gate cheap; do the semantic work only on the small number of survivors
 that reach Stage 6.
 ============================================================
+
+
+============================================================
+2026-09-01 | run_id: n/a (infrastructure, not a pipeline stage)
+STATUS: RESOLVED
+AREA: Scheduled cron runs — `claude` CLI not on PATH
+SEVERITY: MEDIUM
+
+PROBLEM:
+The Friday 19:30 scheduled run (scripts/run_scheduled.sh) failed at
+preflight on its first real firing, 2026-08-28: "PREFLIGHT FAIL: 'claude'
+CLI is not installed or not on PATH" (data/scheduled_runs/20260828-183001.log).
+cron invokes scripts with a minimal PATH (/usr/bin:/bin) that doesn't
+include ~/.local/bin, where `claude` actually lives on this NUC.
+preflight.py's shutil.which("claude") and stage6_analysis.py's direct
+`claude` subprocess calls both depend on PATH resolution, so both are
+silently broken under cron even though everything works fine when a
+human runs `python scout.py` interactively (login shell PATH includes
+~/.local/bin). scripts/run_todo_fixes.sh (Thursday) calls `claude -p`
+directly and has the identical exposure, though it hadn't yet failed
+visibly since NEXT has been empty every Thursday so far.
+
+FIX:
+Added `export PATH="/home/lee/.local/bin:$PATH"` near the top of both
+scripts/run_scheduled.sh and scripts/run_todo_fixes.sh, right after
+`set -uo pipefail`.
+
+VERIFICATION:
+Simulated cron's stripped environment directly: `env -i HOME="$HOME"
+PATH="/usr/bin:/bin" bash -c '...'`. Without the fix, `which claude`
+resolves to nothing inside that shell. With the PATH export added,
+`which claude` -> /home/lee/.local/bin/claude, `claude --version` ->
+2.1.252, and `python3 preflight.py` reports all three checks
+[OK] (yt-dlp, YouTube autocomplete, Claude Code CLI) under the
+simulated cron PATH.
+
+LESSON:
+A script that works when run manually can still be broken under cron,
+because cron's PATH is minimal and doesn't inherit the invoking user's
+shell rc files (.bashrc/.profile). Any cron-launched script that shells
+out to a tool installed under a user-local bin directory (~/.local/bin,
+~/.cargo/bin, etc.) needs an explicit PATH export -- don't rely on
+`which <tool>` working just because it works interactively. Test cron
+scripts by simulating cron's actual environment (`env -i ... bash -c`),
+not by running them from an interactive shell.
+============================================================
