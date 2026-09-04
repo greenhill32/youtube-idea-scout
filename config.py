@@ -210,6 +210,14 @@ OPPORTUNITY_GATE_CADENCE_REVIEW_PHRASES = [
 OPPORTUNITY_GATE_REJECT_BAD_DATA = True
 OPPORTUNITY_GATE_REJECT_ALL_SPAM_CANDIDATES = True
 
+# Stage 5 format evidence. Keep this deliberately light: one transcript per
+# surviving channel is enough context for Stage 6 to fingerprint format without
+# turning Stage 5 into a second crawler.
+OPPORTUNITY_FORMAT_CAPTIONS_DIR = DATA_DIR / "opportunity_captions"
+OPPORTUNITY_FORMAT_TRANSCRIPTS_PER_CHANNEL = int(os.getenv("SCOUT_OPPORTUNITY_FORMAT_TRANSCRIPTS", "1"))
+OPPORTUNITY_FORMAT_CAPTION_TIMEOUT_SECONDS = int(os.getenv("SCOUT_OPPORTUNITY_FORMAT_CAPTION_TIMEOUT", "45"))
+OPPORTUNITY_FORMAT_TRANSCRIPT_CHAR_LIMIT = int(os.getenv("SCOUT_OPPORTUNITY_TRANSCRIPT_CHARS", "6000"))
+
 
 # External-feed age bands. 22-45 day feeds are discovery-only: later V2
 # stages must refresh their metrics before scoring.
