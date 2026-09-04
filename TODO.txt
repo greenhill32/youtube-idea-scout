@@ -25,7 +25,63 @@ At the start of maintenance/build work:
 NEXT
 ----
 
-(empty)
+[ ] V2 Stage 4 — validate opportunity hard gates
+    Branch: v2-opportunity
+    Repo: ~/Documents/Projects/youtube-idea-scout
+
+    Do not modify code unless this validation FAILS and a later TODO explicitly
+    authorises the smallest amendment.
+
+    1. git status
+    2. git pull
+    3. Confirm:
+       - stage4_opportunity.py exists
+       - Stage 4 gate settings exist in config.py
+       - Stage 4 is wired in scout.py
+
+    Do NOT rerun Stage 0 or Stage 3.
+
+    Run only:
+      python3 scout.py --mode opportunity --from 4
+
+    Inspect:
+      data/opportunity_stage4_stats.json
+      data/opportunity_gated.json
+      data/opportunity_survivors.json
+
+    Report in todo_result.txt:
+    - channels examined
+    - PASS / REVIEW / REJECT count
+    - survivor count
+    - PASS / REVIEW / REJECT distribution for:
+      data quality, asset dependency, performance dependency, cadence dependency
+    - every REJECT with channel, candidate title, exact gate, reason/evidence
+    - every REVIEW with channel, candidate title, exact gate, reason/evidence
+
+    Manually inspect at least 5 PASS channels, every REJECT, every REVIEW.
+
+    Check specifically:
+    - ambiguous dependency => REVIEW, not REJECT
+    - ordinary documentaries are not rejected merely because they may use footage
+    - generic documentary/history/news wording does not hard-reject by itself
+    - the 3973x Nepal/spam candidate does not survive merely because of raw outlier
+    - FlashpointOriginal, Tech Of History and Old American Empires are not wrongly rejected
+    - every non-rejected record exists in opportunity_survivors.json
+    - no unexpected null/schema failures
+
+    End todo_result.txt with exactly:
+      STAGE 4: PASS
+    or
+      STAGE 4: FAIL
+
+    If FAIL:
+    - give the exact failure and smallest recommended amendment
+    - do not implement Stage 5
+
+    If PASS:
+    - do not build Stage 5
+    - stop after writing todo_result.txt
+
 
 
 OPERATIONS
