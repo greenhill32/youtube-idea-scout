@@ -179,6 +179,24 @@ RUN / CALIBRATION
 LATER
 -----
 
+[ ] V2 Stage 7 — validate HTML opportunity report
+    Built now at data/opportunity_report.html.
+    Also archives each run under data/opportunity_reports/.
+
+    Validate after Stage 6 passes:
+    - report opens without external dependencies
+    - MAKE / WATCH / REJECT counts match Stage 6 exactly
+    - all recurring format clusters render with correct members
+    - each opportunity card shows:
+      channel, candidate evidence, factory fit, rights risk, monetisation,
+      saturation, emergence, verdict reason and cheapest test video
+    - no Stage 6 REJECT is shown as MAKE/WATCH
+    - warnings from opportunity_stage6_stats.json are visible
+    - HTML escapes channel/title/reason text safely
+    - mobile layout remains readable
+    - archived report filename uses run_id
+    - source JSON remains the auditable truth; report is presentation only
+
 [ ] V2 90-day SQLite memory / watchlist
     Implement before calling V2 complete.
 
