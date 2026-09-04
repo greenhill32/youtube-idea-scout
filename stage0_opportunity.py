@@ -18,6 +18,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 from config import (
     DATA_DIR,
@@ -247,14 +248,20 @@ def _yt(args: list[str], timeout: int) -> list[dict]:
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"yt-dlp timed out for {args[-1]!r}") from exc
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed for {args[-1]!r}: {result.stderr[:300]}")
     rows = []
     for line in result.stdout.splitlines():
         try:
             rows.append(json.loads(line))
         except json.JSONDecodeError:
             pass
+
+    # yt-dlp search can return useful JSON rows and still exit non-zero when
+    # individual ranked results are deleted/private/unavailable. Preserve
+    # partial success; fail only when the whole request yielded no usable rows.
+    if rows:
+        return rows
+    if result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed for {args[-1]!r}: {result.stderr[:300]}")
     return rows
 
 
@@ -295,7 +302,14 @@ def collect_self_radar() -> tuple[list[dict], dict]:
     found_by: dict[str, set[str]] = defaultdict(set)
 
     for query in OPPORTUNITY_QUERIES:
-        for row in _yt([f"ytsearchdate{OPPORTUNITY_SEARCH_RESULTS_PER_QUERY}:{query}"], OPPORTUNITY_SEARCH_TIMEOUT_SECONDS):
+        search_url = (
+            "https://www.youtube.com/results?"
+            f"search_query={quote_plus(query)}&sp=EgIIAw%3D%3D"
+        )
+        for row in _yt(
+            ["--playlist-end", str(OPPORTUNITY_SEARCH_RESULTS_PER_QUERY), search_url],
+            OPPORTUNITY_SEARCH_TIMEOUT_SECONDS,
+        ):
             vid, cid = row.get("id") or "", row.get("channel_id") or ""
             published = _yt_date(row.get("upload_date"))
             views = int(row.get("view_count") or 0)
