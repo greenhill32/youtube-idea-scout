@@ -167,7 +167,6 @@ OPPORTUNITY_GATE_ASSET_REJECT_PHRASES = [
     "film clips",
     "tv clips",
     "full movie",
-    "full episode",
     "celebrity compilation",
 ]
 OPPORTUNITY_GATE_ASSET_REVIEW_PHRASES = [
@@ -176,6 +175,7 @@ OPPORTUNITY_GATE_ASSET_REVIEW_PHRASES = [
     "archive footage",
     "news footage",
     "documentary footage",
+    "full episode",
 ]
 OPPORTUNITY_GATE_PERFORMANCE_REJECT_PHRASES = [
     "lip sync",
