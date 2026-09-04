@@ -119,6 +119,69 @@ CHANNEL_DESCRIPTION = (
     "\"why do humans do this?\" explainer content"
 )
 
+# --- V2 Opportunity Mode (additive; V1 above remains unchanged) ---
+OPPORTUNITY_IMPORT_DIR = DATA_DIR / "import"
+OPPORTUNITY_IMPORTED_FILE = DATA_DIR / "imported_channels.json"
+OPPORTUNITY_WATCHLIST_DB = DATA_DIR / "watchlist.db"
+
+# Stage 0 radar source. Override with SCOUT_OPPORTUNITY_SOURCE=self|import.
+OPPORTUNITY_SOURCE_MODE = os.getenv("SCOUT_OPPORTUNITY_SOURCE", "self")
+
+# Broad discovery territories, not V1 hook/query seeds. These are deliberately
+# production-compatible areas, not a hard editorial remit; V2 is allowed to
+# discover adjacent formats.
+OPPORTUNITY_QUERIES = [
+    "history documentary",
+    "daily life history",
+    "forgotten history",
+    "science documentary",
+    "science what if",
+    "space documentary",
+    "engineering explained",
+    "infrastructure documentary",
+    "technology documentary",
+    "business documentary",
+    "geography documentary",
+    "historical ambience",
+    "sleep ambience",
+]
+
+OPPORTUNITY_UPLOAD_WINDOW_DAYS = int(os.getenv("SCOUT_OPPORTUNITY_WINDOW_DAYS", "7"))
+OPPORTUNITY_SEARCH_RESULTS_PER_QUERY = int(os.getenv("SCOUT_OPPORTUNITY_RESULTS_PER_QUERY", "20"))
+OPPORTUNITY_MIN_VIEWS = int(os.getenv("SCOUT_OPPORTUNITY_MIN_VIEWS", "10000"))
+OPPORTUNITY_MAX_SUBSCRIBERS = int(os.getenv("SCOUT_OPPORTUNITY_MAX_SUBSCRIBERS", "100000"))
+OPPORTUNITY_RECENT_UPLOADS_FOR_BASELINE = int(os.getenv("SCOUT_OPPORTUNITY_BASELINE_UPLOADS", "10"))
+OPPORTUNITY_SEARCH_TIMEOUT_SECONDS = int(os.getenv("SCOUT_OPPORTUNITY_TIMEOUT", "60"))
+
+# External-feed age bands. 22-45 day feeds are discovery-only: later V2
+# stages must refresh their metrics before scoring.
+OPPORTUNITY_FRESH_DAYS = 7
+OPPORTUNITY_ACCEPTABLE_DAYS = 21
+OPPORTUNITY_DISCOVERY_ONLY_DAYS = 45
+OPPORTUNITY_WATCH_DAYS = 90
+
+# Production ceiling used by later V2 scoring. "Technically possible" is not
+# enough: factory-fit is about a credible repeatable test at current capability.
+OPPORTUNITY_PRODUCTION_PROFILE = """
+Current strengths:
+- AI still imagery; pans, zooms, parallax and light motion
+- narration/TTS, maps, diagrams, screenshots and charts
+- ambience/sound design and occasional short AI video clips
+- 8-30 minute narrated explainers and long-form ambience
+
+Current weak areas:
+- recurring character animation and lip-sync dialogue
+- heavy 3D, presenter-led formats, or real-world filming
+- formats whose core asset is copyrighted third-party footage
+- high-frequency news/celebrity/sports production
+
+Factory-fit anchors:
+A = credible first test now, <= 1 day
+B = one small production addition, <= 2-3 days
+C = new workflow/tooling, roughly 1-2 weeks
+D = fundamentally outside current capability
+"""
+
 # --- Report ---
 # (report length is governed by MAX_REPORT_IDEAS above — Stage 4 already
 # caps survivors.json, so Stage 7 doesn't need its own separate limit)
