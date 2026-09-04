@@ -25,85 +25,96 @@ At the start of maintenance/build work:
 NEXT
 ----
 
-[ ] V2 Stage 5 — validate format evidence collection
+[ ] V2 Stage 6 — validate semantic judgement + format clustering
     Branch: v2-opportunity
     Repo: ~/Documents/Projects/youtube-idea-scout
 
-    Stage 4 is accepted as PASS.
-    Stage 5 has now been built.
+    Stage 5 is accepted as PASS.
+    Stage 6 has now been built.
 
     Purpose:
-    - do not score or reject anything
-    - package observable format evidence for Stage 6
-    - collect recent title-pattern evidence
-    - summarize typical video length / Shorts share
-    - fetch at most one candidate transcript per surviving channel
-    - cache transcripts under data/opportunity_captions/
+    - per-channel semantic format fingerprint
+    - factory fit A/B/C/D
+    - rights risk LOW/MEDIUM/HIGH/UNKNOWN
+    - monetisation HIGH/MEDIUM/LOW/UNKNOWN
+    - saturation LOW/MEDIUM/HIGH/UNKNOWN
+    - emergence STRONG/MODERATE/WEAK/INSUFFICIENT
+    - cheapest test concept
+    - MAKE/WATCH/REJECT verdict
+    - cross-channel format clustering, minimum 3 unrelated channels
+    - discrimination warnings if MAKE rate is too high or a dimension collapses
 
     Do not modify code.
 
     1. git status
     2. git pull
     3. Confirm:
-       - stage5_opportunity.py exists
-       - Stage 5 config exists in config.py
-       - scout.py wires Stage 5
+       - stage6_opportunity.py exists
+       - Stage 6 config exists in config.py
+       - scout.py wires Stage 6
 
-    Do NOT rerun Stage 0, 3 or 4.
+    Do NOT rerun Stage 0, 3, 4 or 5.
 
     Run only:
-      python3 scout.py --mode opportunity --from 5
+      python3 scout.py --mode opportunity --from 6
 
     Inspect:
-      data/opportunity_format_evidence.json
-      data/opportunity_stage5_stats.json
-      data/opportunity_captions/
+      data/opportunity_stage6.json
+      data/opportunity_stage6_stats.json
 
     Report:
     - channels examined
-    - duration-band distribution
-    - Stage 4 PASS/REVIEW survivor distribution
-    - caption attempts / fetched / cached / unavailable
-    - channels with at least one candidate caption
-    - channels without a candidate caption
-    - whether every Stage 4 survivor appears exactly once in Stage 5 output
-    - whether any Stage 4 REJECT appears incorrectly
-    - whether title-pattern evidence looks sensible on at least 8 varied channels
-    - whether typical_duration_seconds / typical_duration_band look plausible
-    - whether candidate transcript excerpts correspond to the correct video titles
-    - whether transcript failures are non-fatal
-    - any unexpected null/schema issues
+    - MAKE / WATCH / REJECT distribution and percentages
+    - histogram for factory_fit, rights_risk, monetisation, saturation, emergence
+    - editorial failure count
+    - discrimination warnings
+    - number of recurring format clusters
+    - each cluster name, status and channel members
 
     Manually inspect at least:
+    - every MAKE
+    - 5 WATCH
+    - 5 REJECT
+    - HanWay Films
+    - Forbidden Mysteries
     - FlashpointOriginal
     - Tech Of History
     - Old American Empires
-    - Forbidden Mysteries
     - one ambience channel
-    - one very-long-form channel
-    - one channel with no captions if any
-    - one REVIEW survivor
 
-    Important:
-    - Stage 5 must not assign factory fit, rights risk, monetisation, saturation,
-      MAKE/WATCH/REJECT, or a final format fingerprint.
-    - Those belong to Stage 6.
-    - No videos should be downloaded; subtitles only.
+    Check specifically:
+    - HanWay Films should be caught semantically as trailer/promo/third-party-film dependent; it must not become MAKE
+    - Forbidden Mysteries should not be rejected merely for the phrase "Full Episode"
+    - known strong makeable channels should not all collapse into one verdict
+    - MAKE should obey the rule: Factory A, or B with LOW rights risk; not HIGH saturation; emergence supported; no clear semantic red flag
+    - WATCH should represent genuine opportunity with one unresolved/failed MAKE condition or ambiguity
+    - REJECT should have a concrete reason
+    - no fake RPM numbers or unsupported numeric claims
+    - format clusters must be production formats, not topic-only groupings
+    - no cluster with fewer than 3 unique channels
+    - Stage 6 must preserve all 36 Stage 5 channels exactly once
+    - malformed/failed Claude output must fail closed to REJECT, never disappear
 
-    Write the full result to todo_result.txt, replacing the Stage 4 result.
+    Also decide whether the output is usefully discriminating.
+    The run is unhealthy if:
+    - MAKE > about 15%
+    - >60% of results collapse into one verdict or one ordinal band
+    Warnings are not automatic failures, but explain whether they reveal a real quality problem.
+
+    Write the full result to todo_result.txt, replacing Stage 5 result.
 
     End with exactly:
-      STAGE 5: PASS
+      STAGE 6: PASS
     or
-      STAGE 5: FAIL
+      STAGE 6: FAIL
 
     If FAIL:
     - recommend the smallest amendment only
-    - do not implement Stage 6
+    - do not implement Stage 7
 
     If PASS:
     - stop after writing todo_result.txt
-    - do not build Stage 6 yet
+    - do not build Stage 7 yet
 
 
 OPERATIONS
