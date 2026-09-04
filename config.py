@@ -156,6 +156,60 @@ OPPORTUNITY_MIN_TRUSTED_BASELINE_VIEWS = int(os.getenv("SCOUT_OPPORTUNITY_BASELI
 OPPORTUNITY_MAX_EFFECTIVE_OUTLIER = float(os.getenv("SCOUT_OPPORTUNITY_OUTLIER_CAP", "50"))
 OPPORTUNITY_SPAM_HASHTAG_THRESHOLD = int(os.getenv("SCOUT_OPPORTUNITY_SPAM_HASHTAGS", "4"))
 
+OPPORTUNITY_GATE_ASSET_REJECT_PHRASES = [
+    "sports highlights",
+    "football highlights",
+    "soccer highlights",
+    "nba highlights",
+    "nfl highlights",
+    "ufc highlights",
+    "movie clips",
+    "film clips",
+    "tv clips",
+    "full movie",
+    "full episode",
+    "celebrity compilation",
+]
+OPPORTUNITY_GATE_ASSET_REVIEW_PHRASES = [
+    "reaction",
+    "trailer",
+    "archive footage",
+    "news footage",
+    "documentary footage",
+]
+OPPORTUNITY_GATE_PERFORMANCE_REJECT_PHRASES = [
+    "lip sync",
+    "lip-sync",
+    "vtuber",
+    "3d animated series",
+    "3d animation series",
+]
+OPPORTUNITY_GATE_PERFORMANCE_REVIEW_PHRASES = [
+    "interview",
+    "podcast",
+    "reaction",
+    "talk show",
+    "street interview",
+    "presenter",
+]
+OPPORTUNITY_GATE_CADENCE_REJECT_PHRASES = [
+    "breaking news",
+    "daily news",
+    "news today",
+    "live news",
+    "market open",
+    "closing bell",
+]
+OPPORTUNITY_GATE_CADENCE_REVIEW_PHRASES = [
+    "weekly news",
+    "daily update",
+    "this week",
+    "today",
+    "latest news",
+]
+OPPORTUNITY_GATE_REJECT_BAD_DATA = True
+OPPORTUNITY_GATE_REJECT_ALL_SPAM_CANDIDATES = True
+
 
 # External-feed age bands. 22-45 day feeds are discovery-only: later V2
 # stages must refresh their metrics before scoring.
