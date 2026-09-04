@@ -179,6 +179,40 @@ RUN / CALIBRATION
 LATER
 -----
 
+[ ] V2 90-day SQLite memory / watchlist
+    Implement before calling V2 complete.
+
+    Purpose:
+    - persist weekly history for channels, videos and recurring formats
+    - distinguish one-hit virality from sustained growth
+    - track WATCH -> MAKE changes over time
+    - track format status: EMERGING / SPREADING / SATURATED / FADED
+    - retain source provenance so discovery sources can be evaluated later
+    - retire stale items after 90 days with a final verdict
+
+    Intended database:
+      data/watchlist.db
+
+    Minimum schema:
+    - channels(channel_id, title, first_seen, verdict, subniche, notes,
+      source, first_source_seen, last_source_seen)
+    - snapshots(channel_id, taken_at, subscriber_count, video_count, total_views)
+    - videos(video_id, channel_id, published_at, title, view_count,
+      baseline_views, outlier_multiple, last_seen)
+    - formats(format_id, name, description, first_seen, last_seen, status)
+    - channel_formats(channel_id, format_id, confidence)
+
+    Current state:
+    - config.py already defines OPPORTUNITY_WATCHLIST_DB
+    - OPPORTUNITY_WATCH_DAYS is already 90
+    - Stage 0 can read an existing watchlist DB and set is_watched
+    - nothing currently creates/populates/updates the DB
+
+    Build only after Stage 6 passes.
+    Integrate before/alongside Stage 7 report.
+    Keep SQLite local and lightweight; no external DB service.
+
+
 [ ] Consider lightweight human feedback
     - WOULD MAKE
     - WOULD NOT MAKE
