@@ -8,7 +8,8 @@ Usage:
   python scout.py            # Full run
   python scout.py --from 5   # Resume from stage 5 (captions)
   python scout.py --preflight                      # Preflight checks only
-  python scout.py --mode opportunity               # V2 Stage 0, self-collected radar
+  python scout.py --mode opportunity               # V2 Stage 0 then Stage 3
+  python scout.py --mode opportunity --from 3      # V2 Stage 3 using existing Stage 0 output
   python scout.py --mode opportunity --source import # V2 Stage 0, external JSON feed
 """
 
@@ -27,6 +28,7 @@ from stage5_captions import run_captions
 from stage6_analysis import run_analysis
 from stage7_report import generate_report
 from stage0_opportunity import run_opportunity_radar
+from stage3_opportunity import run_opportunity_enrichment
 
 
 def main():
@@ -57,16 +59,25 @@ def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     if args.mode == "opportunity":
-        print("\n" + "="*60)
-        print("Stage 0: Opportunity radar")
-        print("="*60)
-        try:
-            run_opportunity_radar(args.source)
-        except Exception as e:
-            print(f"\nFATAL: Stage 0 (Opportunity radar) failed: {e}")
-            sys.exit(1)
-        print("\nSTAGE 0 BUILT. Per the project stage-gate rule, later V2 stages are not wired yet.")
-        print("Verify data/imported_channels.json, then continue only after Stage 0 is accepted.")
+        opportunity_stages = [
+            (0, "Opportunity radar", lambda: run_opportunity_radar(args.source)),
+            (3, "Opportunity enrichment", run_opportunity_enrichment),
+        ]
+        for stage_num, name, fn in opportunity_stages:
+            if stage_num < args.from_stage:
+                print(f"Stage {stage_num}: {name} — SKIPPED (resuming from {args.from_stage})")
+                continue
+            print("\n" + "="*60)
+            print(f"Stage {stage_num}: {name}")
+            print("="*60)
+            try:
+                fn()
+            except Exception as e:
+                print(f"\nFATAL: Stage {stage_num} ({name}) failed: {e}")
+                sys.exit(1)
+            if stage_num == 3:
+                print("\nV2 Stage 3 built. Per the stage-gate rule, Stage 4 is not wired yet.")
+                print("Verify data/opportunity_enriched.json and opportunity_stage3_stats.json before continuing.")
         return
 
     stages = [
