@@ -1,5 +1,7 @@
 # YouTube Idea Scout
 
+[![GitHub](https://img.shields.io/badge/GitHub-youtube--idea--scout-181717?logo=github)](https://github.com/greenhill32/youtube-idea-scout)
+
 Searches YouTube overnight against a maintained list of niches/keywords and produces a morning report of video ideas worth considering.
 
 ## What it does
