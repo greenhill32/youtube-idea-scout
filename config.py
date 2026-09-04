@@ -225,6 +225,9 @@ OPPORTUNITY_STAGE6_MIN_FORMAT_CHANNELS = int(os.getenv("SCOUT_OPPORTUNITY_MIN_FO
 OPPORTUNITY_STAGE6_MAX_MAKE_RATE = float(os.getenv("SCOUT_OPPORTUNITY_MAX_MAKE_RATE", "0.15"))
 OPPORTUNITY_STAGE6_COLLAPSE_WARNING_RATE = float(os.getenv("SCOUT_OPPORTUNITY_COLLAPSE_WARNING_RATE", "0.60"))
 
+OPPORTUNITY_REPORT_FILE = DATA_DIR / "opportunity_report.html"
+OPPORTUNITY_REPORTS_ARCHIVE_DIR = DATA_DIR / "opportunity_reports"
+
 
 # External-feed age bands. 22-45 day feeds are discovery-only: later V2
 # stages must refresh their metrics before scoring.
