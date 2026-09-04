@@ -1,0 +1,25 @@
+{
+  "source": "manual-export",
+  "fetched_at": "2026-09-04T12:00:00Z",
+  "schema_version": 1,
+  "channels": [
+    {
+      "channel_id": "UCxxxxxxxxxxxxxxxxxxxxxx",
+      "title": "Example Breakout Channel",
+      "subscriber_count": 12000,
+      "video_count": 7,
+      "created_at": null,
+      "country": "GB",
+      "videos": [
+        {
+          "video_id": "exampleVideo01",
+          "title": "Example breakout video",
+          "published_at": "2026-09-02T18:00:00Z",
+          "view_count": 85000,
+          "duration_seconds": 912,
+          "is_short": false
+        }
+      ]
+    }
+  ]
+}

@@ -119,6 +119,145 @@ CHANNEL_DESCRIPTION = (
     "\"why do humans do this?\" explainer content"
 )
 
+# --- V2 Opportunity Mode (additive; V1 above remains unchanged) ---
+OPPORTUNITY_IMPORT_DIR = DATA_DIR / "import"
+OPPORTUNITY_IMPORTED_FILE = DATA_DIR / "imported_channels.json"
+OPPORTUNITY_WATCHLIST_DB = DATA_DIR / "watchlist.db"
+
+# Stage 0 radar source. Override with SCOUT_OPPORTUNITY_SOURCE=self|import.
+OPPORTUNITY_SOURCE_MODE = os.getenv("SCOUT_OPPORTUNITY_SOURCE", "self")
+
+# Broad discovery territories, not V1 hook/query seeds. These are deliberately
+# production-compatible areas, not a hard editorial remit; V2 is allowed to
+# discover adjacent formats.
+OPPORTUNITY_QUERIES = [
+    "history documentary",
+    "daily life history",
+    "forgotten history",
+    "science documentary",
+    "science what if",
+    "space documentary",
+    "engineering explained",
+    "infrastructure documentary",
+    "technology documentary",
+    "business documentary",
+    "geography documentary",
+    "historical ambience",
+    "sleep ambience",
+]
+
+OPPORTUNITY_UPLOAD_WINDOW_DAYS = int(os.getenv("SCOUT_OPPORTUNITY_WINDOW_DAYS", "7"))
+OPPORTUNITY_SEARCH_RESULTS_PER_QUERY = int(os.getenv("SCOUT_OPPORTUNITY_RESULTS_PER_QUERY", "20"))
+OPPORTUNITY_MIN_VIEWS = int(os.getenv("SCOUT_OPPORTUNITY_MIN_VIEWS", "10000"))
+OPPORTUNITY_MAX_SUBSCRIBERS = int(os.getenv("SCOUT_OPPORTUNITY_MAX_SUBSCRIBERS", "100000"))
+OPPORTUNITY_RECENT_UPLOADS_FOR_BASELINE = int(os.getenv("SCOUT_OPPORTUNITY_BASELINE_UPLOADS", "10"))
+OPPORTUNITY_SEARCH_TIMEOUT_SECONDS = int(os.getenv("SCOUT_OPPORTUNITY_TIMEOUT", "60"))
+OPPORTUNITY_MIN_TRUSTED_BASELINE_VIEWS = int(os.getenv("SCOUT_OPPORTUNITY_BASELINE_FLOOR", "500"))
+OPPORTUNITY_MAX_EFFECTIVE_OUTLIER = float(os.getenv("SCOUT_OPPORTUNITY_OUTLIER_CAP", "50"))
+OPPORTUNITY_SPAM_HASHTAG_THRESHOLD = int(os.getenv("SCOUT_OPPORTUNITY_SPAM_HASHTAGS", "4"))
+
+OPPORTUNITY_GATE_ASSET_REJECT_PHRASES = [
+    "sports highlights",
+    "football highlights",
+    "soccer highlights",
+    "nba highlights",
+    "nfl highlights",
+    "ufc highlights",
+    "movie clips",
+    "film clips",
+    "tv clips",
+    "full movie",
+    "celebrity compilation",
+]
+OPPORTUNITY_GATE_ASSET_REVIEW_PHRASES = [
+    "reaction",
+    "trailer",
+    "archive footage",
+    "news footage",
+    "documentary footage",
+    "full episode",
+]
+OPPORTUNITY_GATE_PERFORMANCE_REJECT_PHRASES = [
+    "lip sync",
+    "lip-sync",
+    "vtuber",
+    "3d animated series",
+    "3d animation series",
+]
+OPPORTUNITY_GATE_PERFORMANCE_REVIEW_PHRASES = [
+    "interview",
+    "podcast",
+    "reaction",
+    "talk show",
+    "street interview",
+    "presenter",
+]
+OPPORTUNITY_GATE_CADENCE_REJECT_PHRASES = [
+    "breaking news",
+    "daily news",
+    "news today",
+    "live news",
+    "market open",
+    "closing bell",
+]
+OPPORTUNITY_GATE_CADENCE_REVIEW_PHRASES = [
+    "weekly news",
+    "daily update",
+    "this week",
+    "today",
+    "latest news",
+]
+OPPORTUNITY_GATE_REJECT_BAD_DATA = True
+OPPORTUNITY_GATE_REJECT_ALL_SPAM_CANDIDATES = True
+
+# Stage 5 format evidence. Keep this deliberately light: one transcript per
+# surviving channel is enough context for Stage 6 to fingerprint format without
+# turning Stage 5 into a second crawler.
+OPPORTUNITY_FORMAT_CAPTIONS_DIR = DATA_DIR / "opportunity_captions"
+OPPORTUNITY_FORMAT_TRANSCRIPTS_PER_CHANNEL = int(os.getenv("SCOUT_OPPORTUNITY_FORMAT_TRANSCRIPTS", "1"))
+OPPORTUNITY_FORMAT_CAPTION_TIMEOUT_SECONDS = int(os.getenv("SCOUT_OPPORTUNITY_FORMAT_CAPTION_TIMEOUT", "45"))
+OPPORTUNITY_FORMAT_TRANSCRIPT_CHAR_LIMIT = int(os.getenv("SCOUT_OPPORTUNITY_TRANSCRIPT_CHARS", "6000"))
+
+# Stage 6 semantic opportunity judgement.
+OPPORTUNITY_STAGE6_MODEL = os.getenv("SCOUT_OPPORTUNITY_MODEL", CLAUDE_MODEL)
+OPPORTUNITY_STAGE6_TIMEOUT_SECONDS = int(os.getenv("SCOUT_OPPORTUNITY_STAGE6_TIMEOUT", "120"))
+OPPORTUNITY_STAGE6_MIN_FORMAT_CHANNELS = int(os.getenv("SCOUT_OPPORTUNITY_MIN_FORMAT_CHANNELS", "3"))
+OPPORTUNITY_STAGE6_MAX_MAKE_RATE = float(os.getenv("SCOUT_OPPORTUNITY_MAX_MAKE_RATE", "0.15"))
+OPPORTUNITY_STAGE6_COLLAPSE_WARNING_RATE = float(os.getenv("SCOUT_OPPORTUNITY_COLLAPSE_WARNING_RATE", "0.60"))
+
+OPPORTUNITY_REPORT_FILE = DATA_DIR / "opportunity_report.html"
+OPPORTUNITY_REPORTS_ARCHIVE_DIR = DATA_DIR / "opportunity_reports"
+
+
+# External-feed age bands. 22-45 day feeds are discovery-only: later V2
+# stages must refresh their metrics before scoring.
+OPPORTUNITY_FRESH_DAYS = 7
+OPPORTUNITY_ACCEPTABLE_DAYS = 21
+OPPORTUNITY_DISCOVERY_ONLY_DAYS = 45
+OPPORTUNITY_WATCH_DAYS = 90
+
+# Production ceiling used by later V2 scoring. "Technically possible" is not
+# enough: factory-fit is about a credible repeatable test at current capability.
+OPPORTUNITY_PRODUCTION_PROFILE = """
+Current strengths:
+- AI still imagery; pans, zooms, parallax and light motion
+- narration/TTS, maps, diagrams, screenshots and charts
+- ambience/sound design and occasional short AI video clips
+- 8-30 minute narrated explainers and long-form ambience
+
+Current weak areas:
+- recurring character animation and lip-sync dialogue
+- heavy 3D, presenter-led formats, or real-world filming
+- formats whose core asset is copyrighted third-party footage
+- high-frequency news/celebrity/sports production
+
+Factory-fit anchors:
+A = credible first test now, <= 1 day
+B = one small production addition, <= 2-3 days
+C = new workflow/tooling, roughly 1-2 weeks
+D = fundamentally outside current capability
+"""
+
 # --- Report ---
 # (report length is governed by MAX_REPORT_IDEAS above — Stage 4 already
 # caps survivors.json, so Stage 7 doesn't need its own separate limit)

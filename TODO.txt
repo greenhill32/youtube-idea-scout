@@ -25,7 +25,96 @@ At the start of maintenance/build work:
 NEXT
 ----
 
-(empty)
+[ ] V2 Stage 6 — validate semantic judgement + format clustering
+    Branch: v2-opportunity
+    Repo: ~/Documents/Projects/youtube-idea-scout
+
+    Stage 5 is accepted as PASS.
+    Stage 6 has now been built.
+
+    Purpose:
+    - per-channel semantic format fingerprint
+    - factory fit A/B/C/D
+    - rights risk LOW/MEDIUM/HIGH/UNKNOWN
+    - monetisation HIGH/MEDIUM/LOW/UNKNOWN
+    - saturation LOW/MEDIUM/HIGH/UNKNOWN
+    - emergence STRONG/MODERATE/WEAK/INSUFFICIENT
+    - cheapest test concept
+    - MAKE/WATCH/REJECT verdict
+    - cross-channel format clustering, minimum 3 unrelated channels
+    - discrimination warnings if MAKE rate is too high or a dimension collapses
+
+    Do not modify code.
+
+    1. git status
+    2. git pull
+    3. Confirm:
+       - stage6_opportunity.py exists
+       - Stage 6 config exists in config.py
+       - scout.py wires Stage 6
+
+    Do NOT rerun Stage 0, 3, 4 or 5.
+
+    Run only:
+      python3 scout.py --mode opportunity --from 6
+
+    Inspect:
+      data/opportunity_stage6.json
+      data/opportunity_stage6_stats.json
+
+    Report:
+    - channels examined
+    - MAKE / WATCH / REJECT distribution and percentages
+    - histogram for factory_fit, rights_risk, monetisation, saturation, emergence
+    - editorial failure count
+    - discrimination warnings
+    - number of recurring format clusters
+    - each cluster name, status and channel members
+
+    Manually inspect at least:
+    - every MAKE
+    - 5 WATCH
+    - 5 REJECT
+    - HanWay Films
+    - Forbidden Mysteries
+    - FlashpointOriginal
+    - Tech Of History
+    - Old American Empires
+    - one ambience channel
+
+    Check specifically:
+    - HanWay Films should be caught semantically as trailer/promo/third-party-film dependent; it must not become MAKE
+    - Forbidden Mysteries should not be rejected merely for the phrase "Full Episode"
+    - known strong makeable channels should not all collapse into one verdict
+    - MAKE should obey the rule: Factory A, or B with LOW rights risk; not HIGH saturation; emergence supported; no clear semantic red flag
+    - WATCH should represent genuine opportunity with one unresolved/failed MAKE condition or ambiguity
+    - REJECT should have a concrete reason
+    - no fake RPM numbers or unsupported numeric claims
+    - format clusters must be production formats, not topic-only groupings
+    - no cluster with fewer than 3 unique channels
+    - Stage 6 must preserve all 36 Stage 5 channels exactly once
+    - malformed/failed Claude output must fail closed to REJECT, never disappear
+
+    Also decide whether the output is usefully discriminating.
+    The run is unhealthy if:
+    - MAKE > about 15%
+    - >60% of results collapse into one verdict or one ordinal band
+    Warnings are not automatic failures, but explain whether they reveal a real quality problem.
+
+    Write the full result to todo_result.txt, replacing Stage 5 result.
+
+    End with exactly:
+      STAGE 6: PASS
+    or
+      STAGE 6: FAIL
+
+    If FAIL:
+    - recommend the smallest amendment only
+    - do not implement Stage 7
+
+    If PASS:
+    - stop after writing todo_result.txt
+    - do not build Stage 7 yet
 
 
 OPERATIONS
@@ -89,6 +178,40 @@ RUN / CALIBRATION
 
 LATER
 -----
+
+[ ] V2 90-day SQLite memory / watchlist
+    Implement before calling V2 complete.
+
+    Purpose:
+    - persist weekly history for channels, videos and recurring formats
+    - distinguish one-hit virality from sustained growth
+    - track WATCH -> MAKE changes over time
+    - track format status: EMERGING / SPREADING / SATURATED / FADED
+    - retain source provenance so discovery sources can be evaluated later
+    - retire stale items after 90 days with a final verdict
+
+    Intended database:
+      data/watchlist.db
+
+    Minimum schema:
+    - channels(channel_id, title, first_seen, verdict, subniche, notes,
+      source, first_source_seen, last_source_seen)
+    - snapshots(channel_id, taken_at, subscriber_count, video_count, total_views)
+    - videos(video_id, channel_id, published_at, title, view_count,
+      baseline_views, outlier_multiple, last_seen)
+    - formats(format_id, name, description, first_seen, last_seen, status)
+    - channel_formats(channel_id, format_id, confidence)
+
+    Current state:
+    - config.py already defines OPPORTUNITY_WATCHLIST_DB
+    - OPPORTUNITY_WATCH_DAYS is already 90
+    - Stage 0 can read an existing watchlist DB and set is_watched
+    - nothing currently creates/populates/updates the DB
+
+    Build only after Stage 6 passes.
+    Integrate before/alongside Stage 7 report.
+    Keep SQLite local and lightweight; no external DB service.
+
 
 [ ] Consider lightweight human feedback
     - WOULD MAKE
