@@ -7,7 +7,9 @@ Runs all stages in order:
 Usage:
   python scout.py            # Full run
   python scout.py --from 5   # Resume from stage 5 (captions)
-  python scout.py --preflight # Preflight checks only
+  python scout.py --preflight                      # Preflight checks only
+  python scout.py --mode opportunity               # V2 Stage 0, self-collected radar
+  python scout.py --mode opportunity --source import # V2 Stage 0, external JSON feed
 """
 
 import sys
@@ -24,6 +26,7 @@ from stage4_filter import run_filter
 from stage5_captions import run_captions
 from stage6_analysis import run_analysis
 from stage7_report import generate_report
+from stage0_opportunity import run_opportunity_radar
 
 
 def main():
@@ -32,6 +35,10 @@ def main():
                         help="Resume from stage N (1-7)")
     parser.add_argument("--preflight", action="store_true",
                         help="Run preflight checks only")
+    parser.add_argument("--mode", choices=["idea", "opportunity"], default="idea",
+                        help="idea = frozen V1 path (default); opportunity = V2 Stage 0 radar")
+    parser.add_argument("--source", choices=["self", "import"], default=None,
+                        help="Opportunity radar source override: self or import")
     args = parser.parse_args()
 
     print(f"=== YouTube Idea Scout ===")
@@ -48,6 +55,19 @@ def main():
 
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if args.mode == "opportunity":
+        print("\n" + "="*60)
+        print("Stage 0: Opportunity radar")
+        print("="*60)
+        try:
+            run_opportunity_radar(args.source)
+        except Exception as e:
+            print(f"\nFATAL: Stage 0 (Opportunity radar) failed: {e}")
+            sys.exit(1)
+        print("\nSTAGE 0 BUILT. Per the project stage-gate rule, later V2 stages are not wired yet.")
+        print("Verify data/imported_channels.json, then continue only after Stage 0 is accepted.")
+        return
 
     stages = [
         (1, "Autocomplete expansion", run_autocomplete),
